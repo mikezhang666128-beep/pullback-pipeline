@@ -16,6 +16,7 @@ overwrites data and swaps channels (see SOP step 6.c.i). The dashboard enforces 
 by generating the two channel jobs from one movie row.
 """
 from __future__ import annotations
+import os
 
 # ---- FIXED SETTINGS (do not change — from the SOP) -------------------------
 BASE = 100
@@ -56,6 +57,7 @@ def run(job: dict, ctx: dict) -> dict:
             reconverted, SUBSAMPLING_FACTORS, use_block_averaging_if_possible=True
         )
         out_h5 = f"{downname}.h5"
+        os.makedirs(os.path.dirname(out_h5) or ".", exist_ok=True)
         tcio.write_h5(out_h5, subsampled)
 
         artifacts.append({"kind": "ds_h5", "path": out_h5,
