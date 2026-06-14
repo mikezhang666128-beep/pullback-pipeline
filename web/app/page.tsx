@@ -1,12 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-type Classifier = { marker: string; trained: boolean; notes: string | null };
-type Job = {
-  id: string; run_id: string | null; step: string; capability: string;
-  status: string; logs: string | null;
-};
+type Classifier = { marker: string; trained: boolean; notes: string | null; ilp_path: string };
+type Job = { id: string; run_id: string | null; step: string; capability: string; status: string; logs: string | null };
 type Artifact = { job_id: string; kind: string; path: string };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -26,16 +23,20 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // upload-classifier state
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [upMarker, setUpMarker] = useState("");
+  const [upChannel, setUpChannel] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [upMsg, setUpMsg] = useState<string | null>(null);
+
   async function load() {
     const { data: c } = await supabase.from("classifiers")
-      .select("marker,trained,notes").eq("active", true).order("marker");
+      .select("marker,trained,notes,ilp_path").eq("active", true).order("marker");
     const { data: j } = await supabase.from("jobs")
-      .select("id,run_id,step,capability,status,logs")
-      .order("created_at", { ascending: true });
+      .select("id,run_id,step,capability,status,logs").order("created_at", { ascending: true });
     const { data: a } = await supabase.from("artifacts").select("job_id,kind,path");
-    setClassifiers(c ?? []);
-    setJobs(j ?? []);
-    setArtifacts(a ?? []);
+    setClassifiers(c ?? []); setJobs(j ?? []); setArtifacts(a ?? []);
     if (!marker && c && c.length) setMarker(c[0].marker);
   }
 
@@ -44,6 +45,7 @@ export default function Home() {
     const ch = supabase.channel("live")
       .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "artifacts" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "classifiers" }, load)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []); // eslint-disable-line
@@ -55,61 +57,89 @@ export default function Home() {
       body: JSON.stringify({ marker, rawImage, timepoint, workDir }),
     });
     const out = await res.json();
-    setMsg(res.ok ? (out.warning ? `Queued ⚠ ${out.warning}` : "Pipeline queued ✓")
-                  : `Error: ${out.error}`);
+    setMsg(res.ok ? (out.warning ? `Queued ⚠ ${out.warning}` : "Pipeline queued ✓") : `Error: ${out.error}`);
     await load(); setBusy(false);
   }
 
-  // group jobs into runs, newest first
-  const runIds = Array.from(new Set(jobs.map((j) => j.run_id).filter(Boolean))) as string[];
-  runIds.reverse();
+  async function uploadClassifier() {
+    const f = fileRef.current?.files?.[0];
+    if (!f || !upMarker.trim()) { setUpMsg("Pick a .ilp file and enter a marker."); return; }
+    setUploading(true); setUpMsg(null);
+    const fd = new FormData();
+    fd.append("file", f); fd.append("marker", upMarker.trim()); fd.append("channel", String(upChannel));
+    const res = await fetch("/api/classifiers", { method: "POST", body: fd });
+    const out = await res.json();
+    setUpMsg(res.ok ? `Uploaded ${out.sizeMB} MB ✓ — ${upMarker} is now active` : `Error: ${out.error}`);
+    if (res.ok && fileRef.current) fileRef.current.value = "";
+    await load(); setUploading(false);
+  }
+
+  const runIds = (Array.from(new Set(jobs.map((j) => j.run_id).filter(Boolean))) as string[]).reverse();
   const selected = classifiers.find((c) => c.marker === marker);
 
   return (
     <div>
-      {/* ---- Front door ---- */}
+      {/* ---- Run a pullback ---- */}
       <div style={card}>
-        <h2 style={{ margin: "0 0 14px" }}>Run a pullback</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 10, alignItems: "center" }}>
+        <h2 style={h2}>Run a pullback</h2>
+        <div style={grid}>
           <label>Marker</label>
           <select value={marker} onChange={(e) => setMarker(e.target.value)} style={input}>
             {classifiers.map((c) => (
-              <option key={c.marker} value={c.marker}>
-                {c.marker}{c.trained ? "" : "  (not trained)"}
-              </option>
+              <option key={c.marker} value={c.marker}>{c.marker}{c.trained ? "" : "  (not trained)"}</option>
             ))}
           </select>
-
           <label>Raw image</label>
           <input value={rawImage} onChange={(e) => setRawImage(e.target.value)}
                  placeholder="/mnt/crunch/.../TP0_pMyo_crop.tif" style={input} />
-
           <label>Timepoint</label>
-          <input type="number" value={timepoint}
-                 onChange={(e) => setTimepoint(Number(e.target.value))} style={input} />
-
+          <input type="number" value={timepoint} onChange={(e) => setTimepoint(Number(e.target.value))} style={input} />
           <label>Output dir</label>
           <input value={workDir} onChange={(e) => setWorkDir(e.target.value)} style={input} />
         </div>
-
         {selected && !selected.trained && (
           <p style={{ color: "#f59e0b", fontSize: 13, marginTop: 10 }}>
-            ⚠ The {selected.marker} classifier isn’t fully trained — results may be poor until you finish labeling it in Ilastik.
+            ⚠ The {selected.marker} classifier isn’t fully trained — upload a trained one below.
           </p>
         )}
-
         <div style={{ marginTop: 14, display: "flex", gap: 12, alignItems: "center" }}>
           <button onClick={runPipeline} disabled={busy || !rawImage || !marker} style={btn}>
             {busy ? "Queuing…" : "▶ Run pipeline"}
           </button>
-          {msg && <span style={{ color: "#8a93a6", fontSize: 14 }}>{msg}</span>}
+          {msg && <span style={dim}>{msg}</span>}
+        </div>
+      </div>
+
+      {/* ---- Classifier library ---- */}
+      <div style={card}>
+        <h2 style={h2}>Classifier library</h2>
+        {classifiers.length === 0 && <p style={dim}>None yet. Upload a trained .ilp below.</p>}
+        {classifiers.map((c) => (
+          <div key={c.marker} style={{ display: "flex", gap: 10, alignItems: "center", padding: "4px 0" }}>
+            <strong style={{ minWidth: 90 }}>{c.marker}</strong>
+            <span style={{ ...pill, borderColor: c.trained ? "#22c55e" : "#f59e0b", color: c.trained ? "#22c55e" : "#f59e0b" }}>
+              {c.trained ? "trained" : "not trained"}
+            </span>
+            <code style={{ color: "#64748b", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {c.ilp_path}
+            </code>
+          </div>
+        ))}
+        <div style={{ borderTop: "1px solid #1f2633", marginTop: 12, paddingTop: 12 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <input ref={fileRef} type="file" accept=".ilp,.ilp2" style={{ color: "#cbd5e1", fontSize: 13 }} />
+            <input value={upMarker} onChange={(e) => setUpMarker(e.target.value)} placeholder="marker (e.g. pMyo)" style={{ ...input, width: 150 }} />
+            <input type="number" value={upChannel} onChange={(e) => setUpChannel(Number(e.target.value))} title="channel" style={{ ...input, width: 70 }} />
+            <button onClick={uploadClassifier} disabled={uploading} style={btn}>
+              {uploading ? "Uploading…" : "⬆ Upload .ilp"}
+            </button>
+            {upMsg && <span style={dim}>{upMsg}</span>}
+          </div>
         </div>
       </div>
 
       {/* ---- Runs / status ---- */}
-      {runIds.length === 0 && (
-        <p style={{ color: "#8a93a6" }}>No runs yet. Fill the form above and hit Run.</p>
-      )}
+      {runIds.length === 0 && <p style={dim}>No runs yet. Fill the form above and hit Run.</p>}
       {runIds.map((rid) => {
         const rj = jobs.filter((j) => j.run_id === rid)
           .sort((a, b) => STEP_ORDER.indexOf(a.capability) - STEP_ORDER.indexOf(b.capability));
@@ -119,19 +149,12 @@ export default function Home() {
           <div key={rid} style={card}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {rj.map((j) => (
-                <span key={j.id} title={j.logs ?? ""} style={{
-                  ...pill, borderColor: STATUS_COLOR[j.status] ?? "#6b7280",
-                  color: STATUS_COLOR[j.status] ?? "#6b7280",
-                }}>
+                <span key={j.id} title={j.logs ?? ""} style={{ ...pill, borderColor: STATUS_COLOR[j.status] ?? "#6b7280", color: STATUS_COLOR[j.status] ?? "#6b7280" }}>
                   {j.capability} · {j.status}
                 </span>
               ))}
             </div>
-            {pull && (
-              <p style={{ color: "#22c55e", fontSize: 13, marginTop: 12 }}>
-                ✓ Pullback ready: <code style={{ color: "#cbd5e1" }}>{pull.path}</code>
-              </p>
-            )}
+            {pull && <p style={{ color: "#22c55e", fontSize: 13, marginTop: 12 }}>✓ Pullback ready: <code style={{ color: "#cbd5e1" }}>{pull.path}</code></p>}
           </div>
         );
       })}
@@ -139,17 +162,10 @@ export default function Home() {
   );
 }
 
-const card: React.CSSProperties = {
-  border: "1px solid #1f2633", borderRadius: 10, padding: 16, marginBottom: 12, background: "#11151f",
-};
-const btn: React.CSSProperties = {
-  background: "#2563eb", color: "white", border: "none", borderRadius: 8,
-  padding: "9px 16px", cursor: "pointer", fontSize: 14,
-};
-const pill: React.CSSProperties = {
-  border: "1px solid", borderRadius: 999, padding: "3px 10px", fontSize: 12,
-};
-const input: React.CSSProperties = {
-  background: "#0b0e14", color: "#e5e7eb", border: "1px solid #1f2633",
-  borderRadius: 8, padding: "8px 10px", fontSize: 14,
-};
+const card: React.CSSProperties = { border: "1px solid #1f2633", borderRadius: 10, padding: 16, marginBottom: 12, background: "#11151f" };
+const h2: React.CSSProperties = { margin: "0 0 14px", fontSize: 18 };
+const grid: React.CSSProperties = { display: "grid", gridTemplateColumns: "120px 1fr", gap: 10, alignItems: "center" };
+const btn: React.CSSProperties = { background: "#2563eb", color: "white", border: "none", borderRadius: 8, padding: "9px 16px", cursor: "pointer", fontSize: 14 };
+const pill: React.CSSProperties = { border: "1px solid", borderRadius: 999, padding: "3px 10px", fontSize: 12 };
+const input: React.CSSProperties = { background: "#0b0e14", color: "#e5e7eb", border: "1px solid #1f2633", borderRadius: 8, padding: "8px 10px", fontSize: 14 };
+const dim: React.CSSProperties = { color: "#8a93a6", fontSize: 14 };

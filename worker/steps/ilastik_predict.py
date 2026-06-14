@@ -1,20 +1,39 @@
 """
-Step: ilastik_predict  (capability "ilastik_predict")  — runs on the SCHOOL box.
+Step: ilastik_predict  (capability "ilastik_predict")  -- runs on the box.
 
-Headless Ilastik batch prediction. Training the mesoderm.ilp (drawing labels) stays
-manual in the GUI — this automates only the batch export AFTER a trained project exists.
-Mirrors SOP step 10.e: export "Probabilities Stage 2".
+Headless Ilastik batch prediction. Training the .ilp (drawing labels) stays manual in
+the GUI; this automates the batch export AFTER a trained project exists (SOP step 10.e:
+export "Probabilities Stage 2").
+
+The classifier may be either a local path OR a `storage://<bucket>/<key>` reference
+(uploaded through the web). Storage refs are downloaded to a temp file before running.
 
 job.params:
-    ilp_path        : path to the trained mesoderm.ilp
-    input_glob      : downsampled Ch0 .h5 files, e.g. ".../01_ds_data/TP*_Ch0.h5"
+    ilp_path        : trained .ilp -- local path OR storage://classifiers/<marker>/<file>.ilp
+    input_glob      : downsampled .h5 file(s)
     output_dir      : where to write probability maps
-    export_source   : default "Probabilities Stage 2" (Autocontext 2-stage)
+    export_source   : default "Probabilities Stage 2"
 """
 from __future__ import annotations
 import glob
 import os
 import subprocess
+import tempfile
+
+
+def _resolve_ilp(ilp_path, ctx, log):
+    """If ilp_path is a storage:// ref, download it and return a local path."""
+    if not ilp_path.startswith("storage://"):
+        return ilp_path
+    bucket, _, key = ilp_path[len("storage://"):].partition("/")
+    sb = ctx["supabase"]
+    log(f"fetching classifier from storage: {bucket}/{key}")
+    data = sb.storage.from_(bucket).download(key)
+    local = os.path.join(tempfile.mkdtemp(prefix="ilp_"), os.path.basename(key))
+    with open(local, "wb") as f:
+        f.write(data)
+    log(f"classifier -> {local} ({len(data)} bytes)")
+    return local
 
 
 def run(job: dict, ctx: dict) -> dict:
@@ -23,7 +42,7 @@ def run(job: dict, ctx: dict) -> dict:
     p = job.get("params", {}) or {}
 
     ilastik = cfg["tools"]["ilastik"]
-    ilp = p["ilp_path"]
+    ilp = _resolve_ilp(p["ilp_path"], ctx, log)
     input_glob = p["input_glob"]
     output_dir = p["output_dir"]
     export_source = p.get("export_source", "Probabilities Stage 2")
@@ -34,7 +53,6 @@ def run(job: dict, ctx: dict) -> dict:
         raise FileNotFoundError(f"No inputs matched {input_glob}")
     log(f"ilastik headless: {len(inputs)} files -> '{export_source}'")
 
-    # Ilastik appends a suffix; "_Probabilities Stage 2" matches the SOP naming.
     cmd = [
         ilastik,
         "--headless",
@@ -42,7 +60,6 @@ def run(job: dict, ctx: dict) -> dict:
         f"--export_source={export_source}",
         "--output_format=hdf5",
         f"--output_filename_format={output_dir}/{{nickname}}_Probabilities Stage 2.h5",
-        # downsampled .h5 were loaded as cxyz in training; keep axes consistent
         "--input_axes=cxyz",
         *inputs,
     ]
