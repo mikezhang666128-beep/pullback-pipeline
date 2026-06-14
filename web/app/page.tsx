@@ -286,7 +286,10 @@ function App({ user }: { user: any }) {
             {noStages && <span style={dim}>no classifier yet — add one in the library below</span>}
           </div>
           <label>Raw image</label>
-          <input value={rawImage} onChange={(e) => setRawImage(e.target.value)} placeholder="/mnt/crunch/.../TP0_pMyo_crop.tif" style={input} />
+          <div>
+            <input value={rawImage} onChange={(e) => setRawImage(e.target.value)} placeholder="/mnt/crunch/.../TP0_pMyo_crop.tif" style={{ ...input, width: "100%", boxSizing: "border-box" }} />
+            <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 4 }}>The file must be on a drive shared with qbio-vip10 (e.g. crunch). Paste its full path &mdash; the file itself isn&rsquo;t uploaded.</div>
+          </div>
           <label>Timepoint</label>
           <input type="number" value={timepoint} onChange={(e) => setTimepoint(Number(e.target.value))} style={input} />
           <label>Output dir</label>
