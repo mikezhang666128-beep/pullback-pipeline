@@ -13,10 +13,28 @@ const Check = () => (<svg {...I()}><path d="M20 6L9 17l-5-5" /></svg>);
 const Warn = () => (<svg {...I()}><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></svg>);
 const Chevron = ({ open }: { open: boolean }) => (<svg {...I({ style: { transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" } })}><path d="M9 18l6-6-6-6" /></svg>);
 const Out = () => (<svg {...I()}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>);
+const Clock = () => (<svg {...I()}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>);
+
+function fmtDur(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+}
+function runTiming(rj: Job[]) {
+  const created = rj.map((j) => Date.parse(j.created_at)).filter((x) => !isNaN(x));
+  const start = created.length ? Math.min(...created) : Date.now();
+  const anyFailed = rj.some((j) => j.status === "failed");
+  const allDone = rj.length > 0 && rj.every((j) => j.status === "done");
+  let end: number | null = null;
+  if (allDone || anyFailed) {
+    const fins = rj.map((j) => Date.parse(j.finished_at || "")).filter((x) => !isNaN(x));
+    end = fins.length ? Math.max(...fins) : start;
+  }
+  return { state: (anyFailed ? "failed" : allDone ? "done" : "running") as "failed" | "done" | "running", start, end };
+}
 
 /* ---------------- types ---------------- */
 type Classifier = { marker: string; stage: string; trained: boolean; ilp_path: string };
-type Job = { id: string; run_id: string | null; capability: string; status: string; logs: string | null };
+type Job = { id: string; run_id: string | null; capability: string; status: string; logs: string | null; created_at: string; started_at: string | null; finished_at: string | null };
 type Artifact = { job_id: string; kind: string; path: string; meta: any };
 const STATUS_COLOR: Record<string, string> = { queued: "#9ca3af", blocked: "#6b7280", running: "#3b82f6", done: "#22c55e", failed: "#ef4444", canceled: "#6b7280" };
 const STEP_ORDER = ["downsample", "ilastik_predict", "mesh", "pullback"];
@@ -46,7 +64,7 @@ function Login() {
     setBusy(true); setErr(null);
     const res = mode === "signin"
       ? await supabase.auth.signInWithPassword({ email, password: pw })
-      : await supabase.auth.signUp({ email, password: pw });
+      : await supabase.auth.signUp({ email, password: pw, options: { emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined } });
     if (res.error) setErr(res.error.message);
     else if (mode === "signup" && !res.data.session) setErr("Account created — check your email to confirm, then sign in.");
     setBusy(false);
@@ -111,7 +129,7 @@ function App({ user }: { user: any }) {
 
   async function load() {
     const { data: c } = await supabase.from("classifiers").select("marker,stage,trained,ilp_path").eq("active", true).order("marker");
-    const { data: j } = await supabase.from("jobs").select("id,run_id,capability,status,logs").order("created_at", { ascending: true });
+    const { data: j } = await supabase.from("jobs").select("id,run_id,capability,status,logs,created_at,started_at,finished_at").order("created_at", { ascending: true });
     const { data: a } = await supabase.from("artifacts").select("job_id,kind,path,meta");
     setClassifiers(c ?? []); setJobs(j ?? []); setArtifacts(a ?? []);
     if (!marker && c && c.length) setMarker(c[0].marker);
@@ -124,6 +142,14 @@ function App({ user }: { user: any }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "classifiers" }, load)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
+  }, []); // eslint-disable-line
+
+  // live clock for timers + a poll fallback so progress updates without refreshing
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    const poll = setInterval(() => load(), 4000);
+    return () => { clearInterval(tick); clearInterval(poll); };
   }, []); // eslint-disable-line
 
   const markers = Array.from(new Set(classifiers.map((c) => c.marker)));
@@ -271,10 +297,17 @@ function App({ user }: { user: any }) {
         const meshArt = meshJob && artifacts.find((a) => a.job_id === meshJob.id && a.kind === "mesh");
         const meshUrl = meshArt?.meta?.download_url as string | undefined;
         const meshName = (meshArt?.path?.split("/").pop()) || "mesh.obj";
+        const tm = runTiming(rj);
+        const elapsed = fmtDur((tm.end ?? now) - tm.start);
+        const tcol = tm.state === "running" ? "#3b82f6" : tm.state === "done" ? "#22c55e" : "#ef4444";
+        const tlabel = tm.state === "running" ? `running ${elapsed}` : tm.state === "done" ? `done in ${elapsed}` : `failed after ${elapsed}`;
         return (
           <div key={rid} style={card}>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {rj.map((j) => (<span key={j.id} title={j.logs ?? ""} style={{ ...pill, borderColor: STATUS_COLOR[j.status] ?? "#6b7280", color: STATUS_COLOR[j.status] ?? "#6b7280" }}>{j.capability} · {j.status}</span>))}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {rj.map((j) => (<span key={j.id} title={j.logs ?? ""} style={{ ...pill, borderColor: STATUS_COLOR[j.status] ?? "#6b7280", color: STATUS_COLOR[j.status] ?? "#6b7280" }}>{j.capability} · {j.status}</span>))}
+              </div>
+              <span style={{ ...pill, borderColor: tcol, color: tcol, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}><Clock /> {tlabel}</span>
             </div>
             {meshUrl && (
               <p style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 7 }}>
