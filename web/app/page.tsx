@@ -115,6 +115,7 @@ function App({ user }: { user: any }) {
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [helpOpen, setHelpOpen] = useState(false);
+  const [showAllRuns, setShowAllRuns] = useState(false);
 
   useEffect(() => {
     try {
@@ -320,7 +321,7 @@ function App({ user }: { user: any }) {
       {/* Your runs */}
       <h2 style={{ ...h2, fontSize: 16, margin: "18px 0 8px" }}>Your runs</h2>
       {runIds.length === 0 && <p style={dim}>No runs yet.</p>}
-      {runIds.map((rid) => {
+      {(showAllRuns ? runIds : runIds.slice(0, 1)).map((rid) => {
         const rj = jobs.filter((j) => j.run_id === rid).sort((a, b) => STEP_ORDER.indexOf(a.capability) - STEP_ORDER.indexOf(b.capability));
         const meshJob = rj.find((j) => j.capability === "mesh");
         const meshArt = meshJob && artifacts.find((a) => a.job_id === meshJob.id && a.kind === "mesh");
@@ -347,6 +348,12 @@ function App({ user }: { user: any }) {
           </div>
         );
       })}
+      {runIds.length > 1 && (
+        <button onClick={() => setShowAllRuns(!showAllRuns)} style={{ ...ghost, marginTop: 4 }}>
+          {showAllRuns ? "Show less" : `Show all ${runIds.length} runs`}
+        </button>
+      )}
+
       <div style={{ marginTop: 28 }}>
         <h2 style={{ ...h2, fontSize: 14, color: "#64748b", marginBottom: 8 }}>While you wait &mdash; Zebrafish Runner (press space)</h2>
         <iframe src="/fish-game.html" title="Zebrafish Runner" scrolling="no"
