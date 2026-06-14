@@ -258,51 +258,10 @@ function App({ user }: { user: any }) {
         </div>
       )}
 
-      {/* How to use */}
-      <div style={card}>
-        <div onClick={() => setHelpOpen(!helpOpen)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-          <Chevron open={helpOpen} />
-          <Info />
-          <h2 style={{ ...h2, margin: 0 }}>How to use</h2>
-        </div>
-        {helpOpen && (
-          <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.7, color: "#cbd5e1" }}>
-            <ol style={{ margin: 0, paddingLeft: 20 }}>
-              <li>Pick a <b>Marker</b> and click the <b>Stage</b> chip that matches your embryo (green = a trained classifier is ready). If your stage is missing or shows "untrained", upload a trained <code>.ilp</code> in the Classifier library below.</li>
-              <li>Paste the full <b>crunch path</b> to your raw <code>.tif</code>. The <b>Timepoint</b> auto-fills from the filename.</li>
-              <li>Leave <b>Output dir</b> as-is (results go to your own folder) and <b>Output</b> on <b>"Mesh only".</b></li>
-              <li>Click <b>Generate mesh</b>. Watch downsample &rarr; ilastik &rarr; mesh turn green; the timer shows elapsed time. No need to refresh.</li>
-              <li>When it finishes, click <b>Download</b> to get the <code>.obj</code>.</li>
-              <li>Open the <code>.obj</code> in <b>Blender</b> (or Windows 3D Viewer) and do the UV-unwrap + pullback as usual. A <code>.obj</code> is a text file, so opening it in Notepad shows numbers &mdash; that is normal.</li>
-            </ol>
-            <p style={{ marginTop: 10, color: "#8a93a6" }}><b>Fields:</b> Marker/Stage = which trained classifier to use (match your marker + hpf). Raw image = full crunch path (files never leave crunch). Timepoint = which frame (auto-filled). Output = "Mesh only" is recommended; "Full pullback" is experimental.</p>
-            <p style={{ color: "#8a93a6" }}><b>Classifier library:</b> upload a trained <code>.ilp</code> once per marker + stage; it is stored and reused by everyone. Delete or swap anytime.</p>
-          </div>
-        )}
-      </div>
-
-      {/* Worker reset */}
-      <div style={card}>
-        <div onClick={() => setWorkerOpen(!workerOpen)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-          <Chevron open={workerOpen} />
-          <h2 style={{ ...h2, margin: 0 }}>Worker reset</h2>
-          <span style={{ ...dim, fontSize: 12 }}>if jobs stay &ldquo;queued&rdquo;</span>
-        </div>
-        {workerOpen && (
-          <div style={{ marginTop: 12, fontSize: 13, lineHeight: 1.6, color: "#cbd5e1" }}>
-            <p style={{ marginTop: 0 }}>If jobs sit on <b>&ldquo;queued&rdquo;</b> and don&rsquo;t move, the worker on the lab box (qbio-vip10) needs a restart. In <b>LXTerminal</b>, run these <b>one line at a time</b>:</p>
-            <div style={{ fontWeight: 600, margin: "8px 0 4px" }}>Restart (keeps running after logout):</div>
-            <pre style={pre}>{`cd ~/pullback-pipeline-main
-git pull origin main
-pkill -f worker.py
-cd worker
-nohup ~/miniconda3/envs/mike_btc/bin/python -u worker.py --config config.toml > ~/worker.log 2>&1 &`}</pre>
-            <div style={{ fontWeight: 600, margin: "10px 0 4px" }}>Check it&rsquo;s alive:</div>
-            <pre style={pre}>{`pgrep -f worker.py      # a number = running
-tail -n 20 ~/worker.log`}</pre>
-            <p style={{ color: "#8a93a6" }}>The startup line must show <code>caps=[...'downsample','ilastik_predict','mesh','pullback']</code>. Full guide: <code>docs/WORKER_RESET.md</code> in the repo.</p>
-          </div>
-        )}
+      <div style={{ display: "flex", gap: 18, alignItems: "center", margin: "2px 4px 14px", fontSize: 13 }}>
+        <a href="/guide" target="_blank" rel="noreferrer" style={{ color: "#3b82f6", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}><Info /> How to use</a>
+        <a href="/guide#worker" target="_blank" rel="noreferrer" style={{ color: "#3b82f6", textDecoration: "none" }}>Worker reset</a>
+        <a href="/guide" target="_blank" rel="noreferrer" style={{ color: "#64748b", textDecoration: "none", marginLeft: "auto" }}>Full guide &rarr;</a>
       </div>
 
       {/* Run */}
