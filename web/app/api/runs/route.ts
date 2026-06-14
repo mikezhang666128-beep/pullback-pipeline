@@ -16,6 +16,8 @@ export async function POST(req: NextRequest) {
   const timepoint: number = Number(body.timepoint ?? 0);
   const workDir: string = (body.workDir ?? "/home/streichansuper/mike_out").replace(/\/+$/, "");
   const mode: string = body.mode === "pullback" ? "pullback" : "mesh";
+  const userId: string | null = body.userId ?? null;
+  const userTag: string = String(body.userTag ?? "shared").replace(/[^a-zA-Z0-9_-]/g, "_");
 
   if (!marker || !rawImage) {
     return NextResponse.json({ error: "marker and rawImage are required" }, { status: 400 });
@@ -28,25 +30,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `no classifier for ${marker} @ ${stage || "(no stage)"}` }, { status: 404 });
   }
 
+  const userDir = `${workDir}/${userTag}`;
   const ch = clf.channel ?? 0;
   const tag = stage ? `${marker}_${stage}` : marker;
   const stem = `TP${timepoint}_${tag}`;
   const dsStem = `${stem}_Ch${ch}`;
-  const dsH5 = `${workDir}/${dsStem}.h5`;
-  const probH5 = `${workDir}/${dsStem}_Probabilities Stage 2.h5`;
-  const meshObj = `${workDir}/${stem}_mesh.obj`;
-  const outPrefix = `${workDir}/${stem}`;
+  const dsH5 = `${userDir}/${dsStem}.h5`;
+  const probH5 = `${userDir}/${dsStem}_Probabilities Stage 2.h5`;
+  const meshObj = `${userDir}/${stem}_mesh.obj`;
+  const outPrefix = `${userDir}/${stem}`;
   const t = { t_start: timepoint, t_end: timepoint, t_step: 1 };
 
-  const { data: run } = await admin.from("runs").insert({ status: "running" }).select().single();
+  const { data: run } = await admin.from("runs").insert({ status: "running", created_by: userId }).select().single();
 
   const allSteps = [
     { step: `downsample_${dsStem}`, capability: "downsample",
       params: { channel: ch, filename_tmpl: stripTif(rawImage),
-                downname_tmpl: `${workDir}/TP{time}_${tag}_Ch{ch}`, ...t } },
+                downname_tmpl: `${userDir}/TP{time}_${tag}_Ch{ch}`, ...t } },
     { step: "ilastik_predict", capability: "ilastik_predict",
       params: { ilp_path: clf.ilp_path, input_glob: dsH5,
-                output_dir: workDir, export_source: "Probabilities Stage 2" } },
+                output_dir: userDir, export_source: "Probabilities Stage 2" } },
     { step: "mesh", capability: "mesh",
       params: { prob_h5: probH5, out_obj: meshObj } },
     { step: "pullback", capability: "pullback",
