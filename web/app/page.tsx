@@ -119,6 +119,7 @@ function App({ user }: { user: any }) {
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [helpOpen, setHelpOpen] = useState(false);
+  const [workerOpen, setWorkerOpen] = useState(false);
   const [showAllRuns, setShowAllRuns] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [pName, setPName] = useState("");
@@ -276,6 +277,30 @@ function App({ user }: { user: any }) {
             </ol>
             <p style={{ marginTop: 10, color: "#8a93a6" }}><b>Fields:</b> Marker/Stage = which trained classifier to use (match your marker + hpf). Raw image = full crunch path (files never leave crunch). Timepoint = which frame (auto-filled). Output = "Mesh only" is recommended; "Full pullback" is experimental.</p>
             <p style={{ color: "#8a93a6" }}><b>Classifier library:</b> upload a trained <code>.ilp</code> once per marker + stage; it is stored and reused by everyone. Delete or swap anytime.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Worker reset */}
+      <div style={card}>
+        <div onClick={() => setWorkerOpen(!workerOpen)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+          <Chevron open={workerOpen} />
+          <h2 style={{ ...h2, margin: 0 }}>Worker reset</h2>
+          <span style={{ ...dim, fontSize: 12 }}>if jobs stay &ldquo;queued&rdquo;</span>
+        </div>
+        {workerOpen && (
+          <div style={{ marginTop: 12, fontSize: 13, lineHeight: 1.6, color: "#cbd5e1" }}>
+            <p style={{ marginTop: 0 }}>If jobs sit on <b>&ldquo;queued&rdquo;</b> and don&rsquo;t move, the worker on the lab box (qbio-vip10) needs a restart. In <b>LXTerminal</b>, run these <b>one line at a time</b>:</p>
+            <div style={{ fontWeight: 600, margin: "8px 0 4px" }}>Restart (keeps running after logout):</div>
+            <pre style={pre}>{`cd ~/pullback-pipeline-main
+git pull origin main
+pkill -f worker.py
+cd worker
+nohup ~/miniconda3/envs/mike_btc/bin/python -u worker.py --config config.toml > ~/worker.log 2>&1 &`}</pre>
+            <div style={{ fontWeight: 600, margin: "10px 0 4px" }}>Check it&rsquo;s alive:</div>
+            <pre style={pre}>{`pgrep -f worker.py      # a number = running
+tail -n 20 ~/worker.log`}</pre>
+            <p style={{ color: "#8a93a6" }}>The startup line must show <code>caps=[...'downsample','ilastik_predict','mesh','pullback']</code>. Full guide: <code>docs/WORKER_RESET.md</code> in the repo.</p>
           </div>
         )}
       </div>
@@ -518,4 +543,5 @@ const delBtn: React.CSSProperties = { background: "transparent", color: "#ef4444
 const pill: React.CSSProperties = { border: "1px solid", borderRadius: 999, padding: "3px 10px", fontSize: 12 };
 const chip: React.CSSProperties = { border: "1px solid", borderRadius: 8, padding: "5px 12px", fontSize: 13, cursor: "pointer" };
 const input: React.CSSProperties = { background: "#0b0e14", color: "#e5e7eb", border: "1px solid #1f2633", borderRadius: 8, padding: "8px 10px", fontSize: 14 };
+const pre: React.CSSProperties = { background: "#0b0e14", border: "1px solid #1f2633", borderRadius: 8, padding: "10px 12px", overflowX: "auto", fontSize: 12, color: "#86efac", whiteSpace: "pre", margin: 0 };
 const dim: React.CSSProperties = { color: "#8a93a6", fontSize: 14 };
