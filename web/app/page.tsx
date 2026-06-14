@@ -14,6 +14,7 @@ const Warn = () => (<svg {...I()}><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2
 const Chevron = ({ open }: { open: boolean }) => (<svg {...I({ style: { transform: open ? "rotate(90deg)" : "none", transition: "transform .15s" } })}><path d="M9 18l6-6-6-6" /></svg>);
 const Out = () => (<svg {...I()}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>);
 const Clock = () => (<svg {...I()}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>);
+const Info = () => (<svg {...I()}><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>);
 
 function fmtDur(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -113,6 +114,7 @@ function App({ user }: { user: any }) {
   const [libOpen, setLibOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -126,6 +128,10 @@ function App({ user }: { user: any }) {
   useEffect(() => {
     try { localStorage.setItem("pb_form", JSON.stringify({ marker, stage, rawImage, timepoint, workDir, mode })); } catch {}
   }, [marker, stage, rawImage, timepoint, workDir, mode]);
+  useEffect(() => {
+    const m = rawImage.match(/TP(\d+)/i);
+    if (m) setTimepoint(Number(m[1]));
+  }, [rawImage]);
 
   async function load() {
     const { data: c } = await supabase.from("classifiers").select("marker,stage,trained,ilp_path").eq("active", true).order("marker");
@@ -196,6 +202,29 @@ function App({ user }: { user: any }) {
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 8 }}>
         <span style={dim}>{user.email}</span>
         <button onClick={() => supabase.auth.signOut()} style={{ ...ghost, display: "inline-flex", alignItems: "center", gap: 6 }}><Out /> Sign out</button>
+      </div>
+
+      {/* How to use */}
+      <div style={card}>
+        <div onClick={() => setHelpOpen(!helpOpen)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+          <Chevron open={helpOpen} />
+          <Info />
+          <h2 style={{ ...h2, margin: 0 }}>How to use</h2>
+        </div>
+        {helpOpen && (
+          <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.7, color: "#cbd5e1" }}>
+            <ol style={{ margin: 0, paddingLeft: 20 }}>
+              <li>Pick a <b>Marker</b> and click the <b>Stage</b> chip that matches your embryo (green = a trained classifier is ready). If your stage is missing or shows "untrained", upload a trained <code>.ilp</code> in the Classifier library below.</li>
+              <li>Paste the full <b>crunch path</b> to your raw <code>.tif</code>. The <b>Timepoint</b> auto-fills from the filename.</li>
+              <li>Leave <b>Output dir</b> as-is (results go to your own folder) and <b>Output</b> on <b>"Mesh only".</b></li>
+              <li>Click <b>Generate mesh</b>. Watch downsample &rarr; ilastik &rarr; mesh turn green; the timer shows elapsed time. No need to refresh.</li>
+              <li>When it finishes, click <b>Download</b> to get the <code>.obj</code>.</li>
+              <li>Open the <code>.obj</code> in <b>Blender</b> (or Windows 3D Viewer) and do the UV-unwrap + pullback as usual. A <code>.obj</code> is a text file, so opening it in Notepad shows numbers &mdash; that is normal.</li>
+            </ol>
+            <p style={{ marginTop: 10, color: "#8a93a6" }}><b>Fields:</b> Marker/Stage = which trained classifier to use (match your marker + hpf). Raw image = full crunch path (files never leave crunch). Timepoint = which frame (auto-filled). Output = "Mesh only" is recommended; "Full pullback" is experimental.</p>
+            <p style={{ color: "#8a93a6" }}><b>Classifier library:</b> upload a trained <code>.ilp</code> once per marker + stage; it is stored and reused by everyone. Delete or swap anytime.</p>
+          </div>
+        )}
       </div>
 
       {/* Run */}
