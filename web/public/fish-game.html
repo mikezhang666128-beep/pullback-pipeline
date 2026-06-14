@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zebrafish Runner</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b0e14;color:#e6e6e6;
+    font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
+  .wrap{width:820px;max-width:96vw}
+  .title{display:flex;align-items:center;justify-content:space-between;margin:0 4px 8px}
+  .title h1{font-size:16px;margin:0;font-weight:600;color:#cbd5e1}
+  .title .hint{font-size:12px;color:#64748b}
+  .stage{border:1px solid #1f2633;border-radius:12px;overflow:hidden;background:#0d1422;
+    box-shadow:0 8px 30px rgba(0,0,0,.4)}
+  svg{display:block;width:100%;height:auto;touch-action:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title">
+    <h1>🐟 Zebrafish Runner</h1>
+    <span class="hint">SPACE / tap to jump · best&nbsp;<b id="best">0</b></span>
+  </div>
+  <div class="stage">
+    <svg id="game" viewBox="0 0 800 240" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#0e1b30"/><stop offset="1" stop-color="#0a1322"/>
+        </linearGradient>
+        <linearGradient id="fishbody" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#60a5fa"/>
+        </linearGradient>
+      </defs>
+      <rect width="800" height="240" fill="url(#water)"/>
+      <g id="bubbles"></g>
+      <!-- seabed -->
+      <line x1="0" y1="200" x2="800" y2="200" stroke="#22324a" stroke-width="2"/>
+      <g id="sand"></g>
+      <g id="rocks"></g>
+
+      <!-- fish -->
+      <g id="fish" transform="translate(110,180)">
+        <g id="fishtilt">
+          <path d="M-26,0 q-14,-12 -26,-2 q10,2 10,2 q-10,2 -10,2 q12,10 26,-2 Z" fill="#2563eb"/>
+          <ellipse cx="0" cy="0" rx="26" ry="15" fill="url(#fishbody)"/>
+          <path d="M-20,0 a20,15 0 0 0 40,0" fill="#1e3a8a" opacity="0.0"/>
+          <rect x="-10" y="-14" width="4" height="28" rx="2" fill="#1e3a8a" opacity=".55"/>
+          <rect x="0" y="-15" width="4" height="30" rx="2" fill="#1e3a8a" opacity=".55"/>
+          <rect x="10" y="-13" width="4" height="26" rx="2" fill="#1e3a8a" opacity=".55"/>
+          <path d="M2,-12 q12,-10 20,-2 q-12,-2 -20,2 Z" fill="#93c5fd"/>
+          <circle cx="16" cy="-3" r="4.6" fill="#fff"/>
+          <circle cx="17.5" cy="-3" r="2.3" fill="#0b1220"/>
+        </g>
+      </g>
+
+      <!-- overlay -->
+      <g id="overlay">
+        <rect width="800" height="240" fill="#0b0e14" opacity=".62"/>
+        <text id="ovtitle" x="400" y="112" text-anchor="middle" fill="#e6e6e6"
+          font-size="26" font-weight="700">Zebrafish Runner</text>
+        <text id="ovsub" x="400" y="146" text-anchor="middle" fill="#8a93a6" font-size="15">
+          press SPACE to start</text>
+      </g>
+      <text id="score" x="788" y="26" text-anchor="end" fill="#cbd5e1"
+        font-size="16" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+    </svg>
+  </div>
+</div>
+
+<script>
+const SVGNS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("game");
+const fish=document.getElementById("fish");
+const tilt=document.getElementById("fishtilt");
+const rocksG=document.getElementById("rocks");
+const sandG=document.getElementById("sand");
+const bubblesG=document.getElementById("bubbles");
+const overlay=document.getElementById("overlay");
+const ovTitle=document.getElementById("ovtitle");
+const ovSub=document.getElementById("ovsub");
+const scoreT=document.getElementById("score");
+const bestT=document.getElementById("best");
+
+const GROUND=180, FISH_X=110, G=2400, JUMP=-740;
+let best=+(localStorage.getItem("zf_best")||0); bestT.textContent=best;
+
+let state="ready"; // ready | run | over
+let y=GROUND, vy=0, t=0, speed=300, spawn=0, score=0, rocks=[];
+
+// decorative seabed pebbles + bubbles
+for(let i=0;i<40;i++){const c=document.createElementNS(SVGNS,"circle");
+  c.setAttribute("cx",Math.random()*800);c.setAttribute("cy",202+Math.random()*30);
+  c.setAttribute("r",1+Math.random()*2);c.setAttribute("fill","#1b2840");sandG.appendChild(c);}
+let bubbles=[];
+for(let i=0;i<14;i++){const b=document.createElementNS(SVGNS,"circle");
+  b.setAttribute("r",1+Math.random()*2.5);b.setAttribute("fill","#1e3a5f");
+  bubblesG.appendChild(b);bubbles.push({el:b,x:Math.random()*800,y:Math.random()*240,s:8+Math.random()*22});}
+
+function reset(){
+  rocks.forEach(r=>r.el.remove()); rocks=[];
+  y=GROUND; vy=0; t=0; speed=300; spawn=0.7; score=0;
+}
+function start(){ reset(); state="run"; overlay.style.display="none"; }
+function gameOver(){
+  state="over";
+  best=Math.max(best,Math.floor(score)); localStorage.setItem("zf_best",best); bestT.textContent=best;
+  ovTitle.textContent="💥  "+Math.floor(score);
+  ovSub.textContent="press SPACE to try again";
+  overlay.style.display="";
+}
+function jump(){
+  if(state==="run"){ if(y>=GROUND-0.5){ vy=JUMP; } }
+  else { start(); }
+}
+
+function spawnRock(){
+  const g=document.createElementNS(SVGNS,"path");
+  const h=16+Math.random()*22, w=14+Math.random()*16;
+  g.setAttribute("d",`M${-w},0 q${-2},${-h*0.7} ${w*0.4},${-h} q${w*0.7},${-h*0.2} ${w},0 q${4},2 0,2 Z`);
+  g.setAttribute("fill","#3a4a63"); g.setAttribute("stroke","#4b5e7d"); g.setAttribute("stroke-width","1");
+  rocksG.appendChild(g);
+  rocks.push({el:g, x:830, w:w, h:h});
+}
+
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+
+  // bubbles always drift
+  for(const b of bubbles){ b.y-=b.s*dt; if(b.y<-4){b.y=244;b.x=Math.random()*800;}
+    b.el.setAttribute("cx",b.x); b.el.setAttribute("cy",b.y); }
+
+  if(state==="run"){
+    t+=dt; score+=dt*16; speed=300+t*16;
+    scoreT.textContent=Math.floor(score);
+
+    // physics
+    vy+=G*dt; y+=vy*dt;
+    if(y>GROUND){y=GROUND;vy=0;}
+    const airborne=GROUND-y;
+    fish.setAttribute("transform",`translate(${FISH_X},${y})`);
+    tilt.setAttribute("transform",`rotate(${Math.max(-22,Math.min(22,vy*0.02))})`);
+
+    // spawn
+    spawn-=dt;
+    if(spawn<=0){ spawnRock(); spawn=Math.max(0.55, 1.25 - t*0.015) * (0.8+Math.random()*0.6); }
+
+    // move + collide
+    for(const r of rocks){
+      r.x-=speed*dt; r.el.setAttribute("transform",`translate(${r.x},200)`);
+      // collision: fish ~ ellipse rx22 ry13 at (FISH_X,y)
+      const dx=Math.abs(r.x - FISH_X);
+      const fishBottom=y+13, rockTop=200-r.h;
+      if(dx < (r.w+16) && fishBottom > rockTop+3){ gameOver(); }
+    }
+    rocks=rocks.filter(r=>{ if(r.x<-60){r.el.remove();return false;} return true; });
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+addEventListener("keydown",e=>{ if(e.code==="Space"||e.code==="ArrowUp"){ e.preventDefault(); jump(); }});
+svg.addEventListener("pointerdown",e=>{ e.preventDefault(); jump(); });
+</script>
+</body>
+</html>
