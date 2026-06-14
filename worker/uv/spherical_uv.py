@@ -2,29 +2,25 @@
 Pure-Python spherical UV unwrap  --  replaces the manual Blender step.
 
 The lab's Blender workflow was: drop a sphere that encloses the embryo mesh, then
-transfer the sphere's UV onto the mesh by projection (shrinkwrap TARGET_PROJECT +
-data-transfer, see reference/blender_uv_button_script.py). For an enclosing sphere
-centred on the mesh, that projection is radial: every mesh vertex inherits the UV of
-the sphere point straight out from the centre. A sphere's UV *is* a spherical
-(equirectangular) coordinate map, so the whole thing is just:
+transfer the sphere's UV onto the mesh by projection. For an enclosing sphere centred
+on the mesh, that projection is radial: every mesh vertex inherits the UV of the sphere
+point straight out from the centre. A sphere's UV *is* a spherical (equirectangular)
+coordinate map, so the whole thing is:
 
     u = 0.5 + atan2(ny, nx) / (2*pi)      # longitude  (seam at -X)
-    v = 0.5 + asin(nz)      / pi          # latitude   (v=0 south pole, v=1 north)
+    v = 0.5 - asin(nz)      / pi          # latitude
 
-where (nx,ny,nz) is the unit direction from the mesh centre to the vertex. No Blender,
-no Fiji measuring -- the sphere size/centre fall out of the mesh's own geometry.
+where (nx,ny,nz) is the unit direction from the mesh centre to the vertex. The v term is
+SUBTRACTED so the 2D UV triangle winding matches the 3D outward face orientation -- without
+that flip, btc flags ~every triangle as "flipped"/self-intersecting (a global handedness
+inversion). No Blender, no Fiji measuring -- sphere size/centre fall out of the geometry.
 
 Seam handling: a triangle straddling the longitude seam (u jumps ~1 -> ~0) would smear
-across UV space. We keep UVs per-loop (OBJ allows more `vt` than `v`) and push the
-low-u corners of a straddling face to u+1, so each triangle stays compact -- the same
-thing Blender's per-loop UVs do on export.
+across UV space. We keep UVs per-loop (OBJ allows more `vt` than `v`) and push the low-u
+corners of a straddling face to u+1, so each triangle stays compact -- same as Blender's
+per-loop UVs on export.
 
-Writes an OBJ with v / vt / vn / f(v/vt/vn). Normals are recomputed and oriented
-outward (the lab's "recalculate outside normals" step).
-
-VERIFY on the box: compare this pullback to a hand-made one. If btc clips UVs to [0,1]
-rather than tiling, the seam may lose a thin sliver -- harmless, but that's the one
-convention to confirm.
+Writes an OBJ with v / vt / vn / f(v/vt/vn). Normals are recomputed and oriented outward.
 """
 from __future__ import annotations
 
@@ -49,7 +45,7 @@ def spherical_uv(verts, center):
     r[r == 0] = 1.0
     n = d / r[:, None]
     u = 0.5 + np.arctan2(n[:, 1], n[:, 0]) / (2 * np.pi)
-    v = 0.5 + np.arcsin(np.clip(n[:, 2], -1.0, 1.0)) / np.pi
+    v = 0.5 - np.arcsin(np.clip(n[:, 2], -1.0, 1.0)) / np.pi
     return np.stack([u, v], axis=1)
 
 
@@ -83,9 +79,9 @@ def unwrap(in_obj, out_obj, log=print):
     uv = spherical_uv(verts, center)
     vn = vertex_normals(verts, faces, center)
 
-    # per-loop UVs: start with one vt per vertex, add duplicates for seam-straddling faces
+    # per-loop UVs: one vt per vertex, plus duplicates for seam-straddling faces
     vt_list = uv.tolist()
-    dup = {}                      # vertex index -> duplicated (u+1) vt index
+    dup = {}
     face_vt = []
     for face in faces:
         us = [uv[i, 0] for i in face]
@@ -102,7 +98,7 @@ def unwrap(in_obj, out_obj, log=print):
         face_vt.append(corner)
 
     with open(out_obj, "w") as f:
-        f.write("# spherical UV unwrap (pure-python) -- center=%s\n" % (tuple(round(c, 3) for c in center),))
+        f.write("# spherical UV unwrap (pure-python)\n")
         for p in verts:
             f.write("v %.6f %.6f %.6f\n" % (p[0], p[1], p[2]))
         for t in vt_list:
