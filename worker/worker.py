@@ -87,8 +87,12 @@ class Worker:
         data = res.data
         if not data:
             return None
-        # rpc returning a single composite row may come back as dict or [dict]
-        return data[0] if isinstance(data, list) else data
+        job = data[0] if isinstance(data, list) else data
+        # A function RETURNS jobs that returns NULL serializes as an all-null
+        # "ghost" row; treat a missing id as "no job available".
+        if not job or not job.get("id"):
+            return None
+        return job
 
     def log(self, job_id: str, msg: str) -> None:
         print(f"  · {msg}")
