@@ -459,7 +459,7 @@ function Games({ user, pv }: { user: any; pv: number }) {
   }, [bests, sel]); // eslint-disable-line
 
   const fullList = lb.filter((r) => r.game === sel);
-  const rows = fullList.slice(0, 8);
+  const rows = fullList.slice(0, 6);
   const myRank = fullList.findIndex((r) => r.user_id === user.id) + 1;
   const nameOf = (uid: string) => profs[uid]?.name || "anon";
 
@@ -478,11 +478,11 @@ function Games({ user, pv }: { user: any; pv: number }) {
           );
         })}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 190px", gap: 12, alignItems: "start" }}>
         <iframe ref={ref} key={sel} src={GAMES[sel].src} title={GAMES[sel].name} scrolling="no" onLoad={postBest}
           style={{ width: "100%", height: 430, border: "1px solid #1f2633", borderRadius: 12, background: "#0d1422" }} />
-        <div style={{ ...card, marginBottom: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#fbbf24", fontWeight: 700, marginBottom: 4 }}>
+        <div style={{ ...card, marginBottom: 0, padding: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#fbbf24", fontWeight: 700, fontSize: 13, marginBottom: 3 }}>
             <Trophy /> Leaderboard
           </div>
           <div style={{ ...dim, fontSize: 12, marginBottom: 8 }}>
@@ -493,11 +493,11 @@ function Games({ user, pv }: { user: any; pv: number }) {
             const me = r.user_id === user.id;
             const av = profs[r.user_id]?.avatar_url;
             return (
-              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", fontSize: 13,
+              <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", padding: "2px 0", fontSize: 12,
                 color: me ? "#60a5fa" : "#cbd5e1", fontWeight: me ? 700 : 400 }}>
-                <span style={{ width: 20, color: i < 3 ? "#fbbf24" : "#64748b" }}>#{i + 1}</span>
-                {av ? <img src={av} alt="" style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover" }} />
-                    : <span style={{ width: 20, height: 20, borderRadius: "50%", background: "#1f2633", display: "inline-block" }} />}
+                <span style={{ width: 16, color: i < 3 ? "#fbbf24" : "#64748b" }}>#{i + 1}</span>
+                {av ? <img src={av} alt="" style={{ width: 16, height: 16, borderRadius: "50%", objectFit: "cover" }} />
+                    : <span style={{ width: 16, height: 16, borderRadius: "50%", background: "#1f2633", display: "inline-block" }} />}
                 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nameOf(r.user_id)}{me ? " (you)" : ""}</span>
                 <span style={{ fontVariantNumeric: "tabular-nums" }}>{r.best}</span>
               </div>
