@@ -162,7 +162,7 @@ export default function Home() {
             </div>
             {meshUrl && (
               <p style={{ marginTop: 12 }}>
-                <a href={meshUrl} download style={{ color: "#3b82f6", fontWeight: 600, textDecoration: "none" }}>⬇ Download mesh (.obj)</a>
+                <a href={meshUrl + (meshUrl.includes("?") ? "&" : "?") + "download"} style={{ color: "#3b82f6", fontWeight: 600, textDecoration: "none" }}>⬇ Download mesh (.obj)</a>
                 <span style={{ ...dim, marginLeft: 10 }}>then UV + pullback in Blender</span>
               </p>
             )}
