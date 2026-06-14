@@ -1,22 +1,17 @@
 """
-Step: pullback  (capability "pullback")
-
-Final science step: mesh -> pullback image. Two sub-steps, BOTH pure-Python (no Blender):
-  1. UV-map the mesh with a spherical unwrap (worker/uv/spherical_uv.py).
-  2. create_cartographic_projections(raw image, UV mesh) -> projected.tif  (the pullback).
-
-Runs entirely in the blender_tissue_cartography Python env.
+Step: pullback  (capability "pullback")  -- pure-Python, no Blender.
+  1. UV-map the mesh (worker/uv/spherical_uv.py): azimuthal (disk/circle) by default,
+     or equirectangular (square). Optional pole_axis override.
+  2. create_cartographic_projections(raw image, UV mesh) -> projected.tif.
 
 job.params:
-    mesh_obj     : the remeshed .obj from the mesh step
-    raw_image    : full-res microscope .tif (the original fused crop)
-    out_prefix   : output path prefix (writes <prefix>_UV.obj and <prefix>_projected.tif)
-    normal_offsets   : [start, stop, step] for np.arange (default [-45, 10, 0.7088])
-    uv_grid_steps    : default 2048
+    mesh_obj, raw_image, out_prefix
+    projection        : 'azimuthal' (default, circle) | 'equirectangular' (square)
+    pole_axis         : [x,y,z] optional -- which way the embryo cap faces
+    normal_offsets    : [start, stop, step] for np.arange (default [-45,10,0.7088]; lab uses [-5,5,..])
+    uv_grid_steps     : default 2048
     resolution_in_microns : default (0.4092, 0.4092, 0.4092)
-    use_fallback     : default True -- robust interpolation that tolerates a UV map with
-                       flipped/self-intersecting triangles (btc recommends this when the
-                       UV isn't a perfectly clean bijection, as a spherical unwrap rarely is)
+    use_fallback      : default True
 """
 from __future__ import annotations
 import os
@@ -34,11 +29,13 @@ def run(job: dict, ctx: dict) -> dict:
     uv_obj = out_prefix + "_UV.obj"
     os.makedirs(os.path.dirname(out_prefix) or ".", exist_ok=True)
 
-    # 1) UV unwrap -- pure-python spherical projection (no Blender)
+    # 1) UV unwrap -- pure-python (azimuthal=disk by default)
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from uv.spherical_uv import unwrap
-    log("UV unwrap (pure-python spherical) ...")
-    unwrap(mesh_obj, uv_obj, log=log)
+    projection = p.get("projection", "azimuthal")
+    pole_axis = p.get("pole_axis")
+    log("UV unwrap (%s) ..." % projection)
+    unwrap(mesh_obj, uv_obj, log=log, projection=projection, pole_axis=pole_axis)
 
     # 2) cartographic projection -> pullback
     import numpy as np
