@@ -5,15 +5,13 @@ const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_KEY!
 );
-
 function stripTif(p: string) { return p.replace(/\.tiff?$/i, ""); }
 
-// POST /api/runs  { marker, rawImage, timepoint, workDir, mode }
-//   mode = "mesh"  (default) -> downsample -> ilastik -> mesh   (download the .obj)
-//   mode = "pullback"        -> ... -> mesh -> pullback
+// POST /api/runs { marker, stage, rawImage, timepoint, workDir, mode }
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const marker: string = body.marker;
+  const stage: string = body.stage ?? "";
   const rawImage: string = body.rawImage;
   const timepoint: number = Number(body.timepoint ?? 0);
   const workDir: string = (body.workDir ?? "/home/streichansuper/mike_out").replace(/\/+$/, "");
@@ -24,14 +22,15 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: clf } = await admin
-    .from("classifiers").select("ilp_path, channel, trained")
-    .eq("marker", marker).eq("active", true).maybeSingle();
+    .from("classifiers").select("ilp_path, channel, trained, stage")
+    .eq("marker", marker).eq("stage", stage).eq("active", true).maybeSingle();
   if (!clf) {
-    return NextResponse.json({ error: `no active classifier for marker '${marker}'` }, { status: 404 });
+    return NextResponse.json({ error: `no classifier for ${marker} @ ${stage || "(no stage)"}` }, { status: 404 });
   }
 
   const ch = clf.channel ?? 0;
-  const stem = `TP${timepoint}_${marker}`;
+  const tag = stage ? `${marker}_${stage}` : marker;
+  const stem = `TP${timepoint}_${tag}`;
   const dsStem = `${stem}_Ch${ch}`;
   const dsH5 = `${workDir}/${dsStem}.h5`;
   const probH5 = `${workDir}/${dsStem}_Probabilities Stage 2.h5`;
@@ -39,13 +38,12 @@ export async function POST(req: NextRequest) {
   const outPrefix = `${workDir}/${stem}`;
   const t = { t_start: timepoint, t_end: timepoint, t_step: 1 };
 
-  const { data: run } = await admin
-    .from("runs").insert({ status: "running" }).select().single();
+  const { data: run } = await admin.from("runs").insert({ status: "running" }).select().single();
 
   const allSteps = [
     { step: `downsample_${dsStem}`, capability: "downsample",
       params: { channel: ch, filename_tmpl: stripTif(rawImage),
-                downname_tmpl: `${workDir}/TP{time}_${marker}_Ch{ch}`, ...t } },
+                downname_tmpl: `${workDir}/TP{time}_${tag}_Ch{ch}`, ...t } },
     { step: "ilastik_predict", capability: "ilastik_predict",
       params: { ilp_path: clf.ilp_path, input_glob: dsH5,
                 output_dir: workDir, export_source: "Probabilities Stage 2" } },
@@ -67,9 +65,8 @@ export async function POST(req: NextRequest) {
     prevId = job!.id;
     created.push(job!.id);
   }
-
   return NextResponse.json({
     runId: run!.id, jobIds: created, mode,
-    warning: clf.trained ? null : `Classifier for '${marker}' is not fully trained yet.`,
+    warning: clf.trained ? null : `Classifier for ${marker} @ ${stage} is not fully trained.`,
   });
 }

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-type Classifier = { marker: string; trained: boolean; notes: string | null; ilp_path: string };
+type Classifier = { marker: string; stage: string; trained: boolean; notes: string | null; ilp_path: string };
 type Job = { id: string; run_id: string | null; step: string; capability: string; status: string; logs: string | null };
 type Artifact = { job_id: string; kind: string; path: string; meta: any };
 
@@ -17,6 +17,7 @@ export default function Home() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [marker, setMarker] = useState("");
+  const [stage, setStage] = useState("");
   const [rawImage, setRawImage] = useState("");
   const [timepoint, setTimepoint] = useState(0);
   const [workDir, setWorkDir] = useState("/home/streichansuper/mike_out");
@@ -26,15 +27,16 @@ export default function Home() {
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [upMarker, setUpMarker] = useState("");
+  const [upStage, setUpStage] = useState("");
   const [upChannel, setUpChannel] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [upMsg, setUpMsg] = useState<string | null>(null);
 
-  // remember form inputs across refreshes (no login yet)
   useEffect(() => {
     try {
       const v = JSON.parse(localStorage.getItem("pb_form") || "{}");
       if (v.marker) setMarker(v.marker);
+      if (v.stage) setStage(v.stage);
       if (v.rawImage) setRawImage(v.rawImage);
       if (typeof v.timepoint === "number") setTimepoint(v.timepoint);
       if (v.workDir) setWorkDir(v.workDir);
@@ -42,14 +44,12 @@ export default function Home() {
     } catch {}
   }, []);
   useEffect(() => {
-    try {
-      localStorage.setItem("pb_form", JSON.stringify({ marker, rawImage, timepoint, workDir, mode }));
-    } catch {}
-  }, [marker, rawImage, timepoint, workDir, mode]);
+    try { localStorage.setItem("pb_form", JSON.stringify({ marker, stage, rawImage, timepoint, workDir, mode })); } catch {}
+  }, [marker, stage, rawImage, timepoint, workDir, mode]);
 
   async function load() {
     const { data: c } = await supabase.from("classifiers")
-      .select("marker,trained,notes,ilp_path").eq("active", true).order("marker");
+      .select("marker,stage,trained,notes,ilp_path").eq("active", true).order("marker");
     const { data: j } = await supabase.from("jobs")
       .select("id,run_id,step,capability,status,logs").order("created_at", { ascending: true });
     const { data: a } = await supabase.from("artifacts").select("job_id,kind,path,meta");
@@ -67,11 +67,19 @@ export default function Home() {
     return () => { supabase.removeChannel(ch); };
   }, []); // eslint-disable-line
 
+  const markers = Array.from(new Set(classifiers.map((c) => c.marker)));
+  const stagesFor = (m: string) => Array.from(new Set(classifiers.filter((c) => c.marker === m).map((c) => c.stage)));
+  // keep stage valid for the chosen marker
+  useEffect(() => {
+    const st = stagesFor(marker);
+    if (marker && st.length && !st.includes(stage)) setStage(st[0]);
+  }, [marker, classifiers]); // eslint-disable-line
+
   async function runPipeline() {
     setBusy(true); setMsg(null);
     const res = await fetch("/api/runs", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ marker, rawImage, timepoint, workDir, mode }),
+      body: JSON.stringify({ marker, stage, rawImage, timepoint, workDir, mode }),
     });
     const out = await res.json();
     setMsg(res.ok ? (out.warning ? `Queued ⚠ ${out.warning}` : `Queued ✓ (${out.mode})`) : `Error: ${out.error}`);
@@ -83,16 +91,17 @@ export default function Home() {
     if (!f || !upMarker.trim()) { setUpMsg("Pick a .ilp file and enter a marker."); return; }
     setUploading(true); setUpMsg(null);
     const fd = new FormData();
-    fd.append("file", f); fd.append("marker", upMarker.trim()); fd.append("channel", String(upChannel));
+    fd.append("file", f); fd.append("marker", upMarker.trim());
+    fd.append("stage", upStage.trim()); fd.append("channel", String(upChannel));
     const res = await fetch("/api/classifiers", { method: "POST", body: fd });
     const out = await res.json();
-    setUpMsg(res.ok ? `Uploaded ${out.sizeMB} MB ✓ — ${upMarker} active` : `Error: ${out.error}`);
+    setUpMsg(res.ok ? `Uploaded ${out.sizeMB} MB ✓ — ${upMarker} @ ${upStage || "(no stage)"}` : `Error: ${out.error}`);
     if (res.ok && fileRef.current) fileRef.current.value = "";
     await load(); setUploading(false);
   }
 
   const runIds = (Array.from(new Set(jobs.map((j) => j.run_id).filter(Boolean))) as string[]).reverse();
-  const selected = classifiers.find((c) => c.marker === marker);
+  const selected = classifiers.find((c) => c.marker === marker && c.stage === stage);
 
   return (
     <div>
@@ -101,7 +110,11 @@ export default function Home() {
         <div style={grid}>
           <label>Marker</label>
           <select value={marker} onChange={(e) => setMarker(e.target.value)} style={input}>
-            {classifiers.map((c) => (<option key={c.marker} value={c.marker}>{c.marker}{c.trained ? "" : "  (not trained)"}</option>))}
+            {markers.map((m) => (<option key={m} value={m}>{m}</option>))}
+          </select>
+          <label>Stage</label>
+          <select value={stage} onChange={(e) => setStage(e.target.value)} style={input}>
+            {stagesFor(marker).map((s) => (<option key={s} value={s}>{s || "(no stage)"}</option>))}
           </select>
           <label>Raw image</label>
           <input value={rawImage} onChange={(e) => setRawImage(e.target.value)} placeholder="/mnt/crunch/.../TP0_pMyo_crop.tif" style={input} />
@@ -116,7 +129,10 @@ export default function Home() {
           </select>
         </div>
         {selected && !selected.trained && (
-          <p style={{ color: "#f59e0b", fontSize: 13, marginTop: 10 }}>⚠ {selected.marker} isn’t fully trained — upload a trained .ilp below.</p>
+          <p style={{ color: "#f59e0b", fontSize: 13, marginTop: 10 }}>⚠ {selected.marker} @ {selected.stage} isn’t fully trained — upload a trained .ilp below.</p>
+        )}
+        {marker && !selected && (
+          <p style={{ color: "#f59e0b", fontSize: 13, marginTop: 10 }}>⚠ No classifier for {marker} @ {stage || "this stage"} — upload one below.</p>
         )}
         <div style={{ marginTop: 14, display: "flex", gap: 12, alignItems: "center" }}>
           <button onClick={runPipeline} disabled={busy || !rawImage || !marker} style={btn}>
@@ -129,17 +145,19 @@ export default function Home() {
       <div style={card}>
         <h2 style={h2}>Classifier library</h2>
         {classifiers.length === 0 && <p style={dim}>None yet. Upload a trained .ilp below.</p>}
-        {classifiers.map((c) => (
-          <div key={c.marker} style={{ display: "flex", gap: 10, alignItems: "center", padding: "4px 0" }}>
-            <strong style={{ minWidth: 90 }}>{c.marker}</strong>
+        {classifiers.map((c, i) => (
+          <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", padding: "4px 0" }}>
+            <strong style={{ minWidth: 70 }}>{c.marker}</strong>
+            <span style={{ ...pill, borderColor: "#3b82f6", color: "#93c5fd", minWidth: 50, textAlign: "center" }}>{c.stage || "—"}</span>
             <span style={{ ...pill, borderColor: c.trained ? "#22c55e" : "#f59e0b", color: c.trained ? "#22c55e" : "#f59e0b" }}>{c.trained ? "trained" : "not trained"}</span>
             <code style={{ color: "#64748b", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.ilp_path}</code>
           </div>
         ))}
         <div style={{ borderTop: "1px solid #1f2633", marginTop: 12, paddingTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <input ref={fileRef} type="file" accept=".ilp,.ilp2" style={{ color: "#cbd5e1", fontSize: 13 }} />
-          <input value={upMarker} onChange={(e) => setUpMarker(e.target.value)} placeholder="marker" style={{ ...input, width: 140 }} />
-          <input type="number" value={upChannel} onChange={(e) => setUpChannel(Number(e.target.value))} title="channel" style={{ ...input, width: 70 }} />
+          <input value={upMarker} onChange={(e) => setUpMarker(e.target.value)} placeholder="marker" style={{ ...input, width: 110 }} />
+          <input value={upStage} onChange={(e) => setUpStage(e.target.value)} placeholder="stage (e.g. 6hpf)" style={{ ...input, width: 130 }} />
+          <input type="number" value={upChannel} onChange={(e) => setUpChannel(Number(e.target.value))} title="channel" style={{ ...input, width: 65 }} />
           <button onClick={uploadClassifier} disabled={uploading} style={btn}>{uploading ? "Uploading…" : "⬆ Upload .ilp"}</button>
           {upMsg && <span style={dim}>{upMsg}</span>}
         </div>
