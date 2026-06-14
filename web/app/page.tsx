@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 type Classifier = { marker: string; trained: boolean; notes: string | null; ilp_path: string };
 type Job = { id: string; run_id: string | null; step: string; capability: string; status: string; logs: string | null };
-type Artifact = { job_id: string; kind: string; path: string };
+type Artifact = { job_id: string; kind: string; path: string; meta: any };
 
 const STATUS_COLOR: Record<string, string> = {
   queued: "#9ca3af", blocked: "#6b7280", running: "#3b82f6",
@@ -20,10 +20,10 @@ export default function Home() {
   const [rawImage, setRawImage] = useState("");
   const [timepoint, setTimepoint] = useState(0);
   const [workDir, setWorkDir] = useState("/home/streichansuper/mike_out");
+  const [mode, setMode] = useState<"mesh" | "pullback">("mesh");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // upload-classifier state
   const fileRef = useRef<HTMLInputElement>(null);
   const [upMarker, setUpMarker] = useState("");
   const [upChannel, setUpChannel] = useState(0);
@@ -35,7 +35,7 @@ export default function Home() {
       .select("marker,trained,notes,ilp_path").eq("active", true).order("marker");
     const { data: j } = await supabase.from("jobs")
       .select("id,run_id,step,capability,status,logs").order("created_at", { ascending: true });
-    const { data: a } = await supabase.from("artifacts").select("job_id,kind,path");
+    const { data: a } = await supabase.from("artifacts").select("job_id,kind,path,meta");
     setClassifiers(c ?? []); setJobs(j ?? []); setArtifacts(a ?? []);
     if (!marker && c && c.length) setMarker(c[0].marker);
   }
@@ -54,10 +54,10 @@ export default function Home() {
     setBusy(true); setMsg(null);
     const res = await fetch("/api/runs", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ marker, rawImage, timepoint, workDir }),
+      body: JSON.stringify({ marker, rawImage, timepoint, workDir, mode }),
     });
     const out = await res.json();
-    setMsg(res.ok ? (out.warning ? `Queued ⚠ ${out.warning}` : "Pipeline queued ✓") : `Error: ${out.error}`);
+    setMsg(res.ok ? (out.warning ? `Queued ⚠ ${out.warning}` : `Queued ✓ (${out.mode})`) : `Error: ${out.error}`);
     await load(); setBusy(false);
   }
 
@@ -69,7 +69,7 @@ export default function Home() {
     fd.append("file", f); fd.append("marker", upMarker.trim()); fd.append("channel", String(upChannel));
     const res = await fetch("/api/classifiers", { method: "POST", body: fd });
     const out = await res.json();
-    setUpMsg(res.ok ? `Uploaded ${out.sizeMB} MB ✓ — ${upMarker} is now active` : `Error: ${out.error}`);
+    setUpMsg(res.ok ? `Uploaded ${out.sizeMB} MB ✓ — ${upMarker} active` : `Error: ${out.error}`);
     if (res.ok && fileRef.current) fileRef.current.value = "";
     await load(); setUploading(false);
   }
@@ -79,82 +79,77 @@ export default function Home() {
 
   return (
     <div>
-      {/* ---- Run a pullback ---- */}
       <div style={card}>
-        <h2 style={h2}>Run a pullback</h2>
+        <h2 style={h2}>Run</h2>
         <div style={grid}>
           <label>Marker</label>
           <select value={marker} onChange={(e) => setMarker(e.target.value)} style={input}>
-            {classifiers.map((c) => (
-              <option key={c.marker} value={c.marker}>{c.marker}{c.trained ? "" : "  (not trained)"}</option>
-            ))}
+            {classifiers.map((c) => (<option key={c.marker} value={c.marker}>{c.marker}{c.trained ? "" : "  (not trained)"}</option>))}
           </select>
           <label>Raw image</label>
-          <input value={rawImage} onChange={(e) => setRawImage(e.target.value)}
-                 placeholder="/mnt/crunch/.../TP0_pMyo_crop.tif" style={input} />
+          <input value={rawImage} onChange={(e) => setRawImage(e.target.value)} placeholder="/mnt/crunch/.../TP0_pMyo_crop.tif" style={input} />
           <label>Timepoint</label>
           <input type="number" value={timepoint} onChange={(e) => setTimepoint(Number(e.target.value))} style={input} />
           <label>Output dir</label>
           <input value={workDir} onChange={(e) => setWorkDir(e.target.value)} style={input} />
+          <label>Output</label>
+          <select value={mode} onChange={(e) => setMode(e.target.value as any)} style={input}>
+            <option value="mesh">Mesh only — download the .obj (do the pullback in Blender)</option>
+            <option value="pullback">Full pullback (experimental)</option>
+          </select>
         </div>
         {selected && !selected.trained && (
-          <p style={{ color: "#f59e0b", fontSize: 13, marginTop: 10 }}>
-            ⚠ The {selected.marker} classifier isn’t fully trained — upload a trained one below.
-          </p>
+          <p style={{ color: "#f59e0b", fontSize: 13, marginTop: 10 }}>⚠ {selected.marker} isn’t fully trained — upload a trained .ilp below.</p>
         )}
         <div style={{ marginTop: 14, display: "flex", gap: 12, alignItems: "center" }}>
           <button onClick={runPipeline} disabled={busy || !rawImage || !marker} style={btn}>
-            {busy ? "Queuing…" : "▶ Run pipeline"}
+            {busy ? "Queuing…" : mode === "mesh" ? "▶ Generate mesh" : "▶ Run pullback"}
           </button>
           {msg && <span style={dim}>{msg}</span>}
         </div>
       </div>
 
-      {/* ---- Classifier library ---- */}
       <div style={card}>
         <h2 style={h2}>Classifier library</h2>
         {classifiers.length === 0 && <p style={dim}>None yet. Upload a trained .ilp below.</p>}
         {classifiers.map((c) => (
           <div key={c.marker} style={{ display: "flex", gap: 10, alignItems: "center", padding: "4px 0" }}>
             <strong style={{ minWidth: 90 }}>{c.marker}</strong>
-            <span style={{ ...pill, borderColor: c.trained ? "#22c55e" : "#f59e0b", color: c.trained ? "#22c55e" : "#f59e0b" }}>
-              {c.trained ? "trained" : "not trained"}
-            </span>
-            <code style={{ color: "#64748b", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {c.ilp_path}
-            </code>
+            <span style={{ ...pill, borderColor: c.trained ? "#22c55e" : "#f59e0b", color: c.trained ? "#22c55e" : "#f59e0b" }}>{c.trained ? "trained" : "not trained"}</span>
+            <code style={{ color: "#64748b", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.ilp_path}</code>
           </div>
         ))}
-        <div style={{ borderTop: "1px solid #1f2633", marginTop: 12, paddingTop: 12 }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <input ref={fileRef} type="file" accept=".ilp,.ilp2" style={{ color: "#cbd5e1", fontSize: 13 }} />
-            <input value={upMarker} onChange={(e) => setUpMarker(e.target.value)} placeholder="marker (e.g. pMyo)" style={{ ...input, width: 150 }} />
-            <input type="number" value={upChannel} onChange={(e) => setUpChannel(Number(e.target.value))} title="channel" style={{ ...input, width: 70 }} />
-            <button onClick={uploadClassifier} disabled={uploading} style={btn}>
-              {uploading ? "Uploading…" : "⬆ Upload .ilp"}
-            </button>
-            {upMsg && <span style={dim}>{upMsg}</span>}
-          </div>
+        <div style={{ borderTop: "1px solid #1f2633", marginTop: 12, paddingTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <input ref={fileRef} type="file" accept=".ilp,.ilp2" style={{ color: "#cbd5e1", fontSize: 13 }} />
+          <input value={upMarker} onChange={(e) => setUpMarker(e.target.value)} placeholder="marker" style={{ ...input, width: 140 }} />
+          <input type="number" value={upChannel} onChange={(e) => setUpChannel(Number(e.target.value))} title="channel" style={{ ...input, width: 70 }} />
+          <button onClick={uploadClassifier} disabled={uploading} style={btn}>{uploading ? "Uploading…" : "⬆ Upload .ilp"}</button>
+          {upMsg && <span style={dim}>{upMsg}</span>}
         </div>
       </div>
 
-      {/* ---- Runs / status ---- */}
-      {runIds.length === 0 && <p style={dim}>No runs yet. Fill the form above and hit Run.</p>}
+      {runIds.length === 0 && <p style={dim}>No runs yet.</p>}
       {runIds.map((rid) => {
-        const rj = jobs.filter((j) => j.run_id === rid)
-          .sort((a, b) => STEP_ORDER.indexOf(a.capability) - STEP_ORDER.indexOf(b.capability));
+        const rj = jobs.filter((j) => j.run_id === rid).sort((a, b) => STEP_ORDER.indexOf(a.capability) - STEP_ORDER.indexOf(b.capability));
+        const meshJob = rj.find((j) => j.capability === "mesh");
+        const meshArt = meshJob && artifacts.find((a) => a.job_id === meshJob.id && a.kind === "mesh");
+        const meshUrl = meshArt?.meta?.download_url as string | undefined;
         const pullJob = rj.find((j) => j.capability === "pullback");
         const pull = pullJob && artifacts.find((a) => a.job_id === pullJob.id && a.kind === "pullback");
         return (
           <div key={rid} style={card}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {rj.map((j) => (
-                <span key={j.id} title={j.logs ?? ""} style={{ ...pill, borderColor: STATUS_COLOR[j.status] ?? "#6b7280", color: STATUS_COLOR[j.status] ?? "#6b7280" }}>
-                  {j.capability} · {j.status}
-                </span>
+                <span key={j.id} title={j.logs ?? ""} style={{ ...pill, borderColor: STATUS_COLOR[j.status] ?? "#6b7280", color: STATUS_COLOR[j.status] ?? "#6b7280" }}>{j.capability} · {j.status}</span>
               ))}
             </div>
-            {pull && <p style={{ color: "#22c55e", fontSize: 13, marginTop: 12 }}>✓ Pullback ready: <code style={{ color: "#cbd5e1" }}>{pull.path}</code></p>}
+            {meshUrl && (
+              <p style={{ marginTop: 12 }}>
+                <a href={meshUrl} download style={{ color: "#3b82f6", fontWeight: 600, textDecoration: "none" }}>⬇ Download mesh (.obj)</a>
+                <span style={{ ...dim, marginLeft: 10 }}>then UV + pullback in Blender</span>
+              </p>
+            )}
+            {pull && <p style={{ color: "#22c55e", fontSize: 13, marginTop: 8 }}>✓ Pullback: <code style={{ color: "#cbd5e1" }}>{pull.path}</code></p>}
           </div>
         );
       })}
