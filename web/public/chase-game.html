@@ -15,12 +15,11 @@
 <body>
 <div class="wrap">
   <div class="title"><h1>Don't Get Chased by Streichian</h1>
-    <span class="hint">click to jump · best&nbsp;<b id="best">0</b></span></div>
+    <span class="hint">click to jump &middot; grab the jet! &middot; best&nbsp;<b id="best">0</b></span></div>
   <div class="stage">
     <svg id="game" viewBox="0 0 560 240" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#101a2e"/><stop offset="1" stop-color="#0a1120"/></linearGradient>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#101a2e"/><stop offset="1" stop-color="#0a1120"/></linearGradient>
         <clipPath id="rc"><circle cx="0" cy="-50" r="15"/></clipPath>
       </defs>
       <rect width="560" height="240" fill="url(#sky)"/>
@@ -33,7 +32,6 @@
           <rect id="lR" x="2" y="-14" width="6" height="16" rx="3" fill="#1f2937"/></g>
         <rect x="-12" y="-40" width="24" height="30" rx="6" fill="#16a34a"/>
         <rect x="-12" y="-36" width="24" height="6" fill="#15803d"/>
-        <!-- head: cartoon by default, real photo swapped in if /streichian.png exists -->
         <g id="pihead" transform="translate(0,-50)">
           <circle cx="0" cy="0" r="13" fill="#f1c9a5"/>
           <path d="M-13,-3 q2,-14 13,-13 q11,-1 13,13 q-6,-7 -13,-6 q-7,-1 -13,6 Z" fill="#d9b38c"/>
@@ -46,7 +44,23 @@
         <text x="0" y="-70" text-anchor="middle" font-size="9" fill="#86efac" font-weight="700">PI</text>
       </g>
 
-      <!-- player (zebrafish) -->
+      <!-- jet powerup (floating) -->
+      <g id="jetpow" style="display:none"><g id="jetpowtilt">
+        <path d="M-18,0 L10,-5 L20,0 L10,5 Z" fill="#cbd5e1"/>
+        <path d="M-4,-4 L-14,-13 L0,-5 Z" fill="#94a3b8"/><path d="M-4,4 L-14,13 L0,5 Z" fill="#94a3b8"/>
+        <circle cx="9" cy="0" r="2.6" fill="#38bdf8"/>
+        <path d="M-18,-2 L-27,0 L-18,2 Z" fill="#f59e0b"/>
+      </g></g>
+
+      <!-- ride jet (under fish, jet mode) -->
+      <g id="ridejet" style="display:none">
+        <g id="fire"></g>
+        <path d="M-28,0 L16,-8 L30,0 L16,8 Z" fill="#e2e8f0"/>
+        <path d="M-6,-7 L-22,-20 L2,-8 Z" fill="#94a3b8"/><path d="M-6,7 L-22,20 L2,8 Z" fill="#94a3b8"/>
+        <circle cx="14" cy="0" r="3.6" fill="#38bdf8"/>
+      </g>
+
+      <!-- player zebrafish -->
       <g id="fish" transform="translate(250,178)"><g id="ftilt">
         <path d="M-22,0 q-12,-10 -22,-2 q8,2 8,2 q-8,2 -8,2 q10,8 22,-2 Z" fill="#2563eb"/>
         <ellipse rx="22" ry="13" fill="#3b82f6"/>
@@ -57,83 +71,115 @@
       </g></g>
 
       <g id="flash" opacity="0"><rect width="560" height="240" fill="#ef4444" opacity=".18"/></g>
+      <g id="jetflash" opacity="0"><rect width="560" height="240" fill="#38bdf8" opacity=".15"/></g>
       <g id="overlay"><rect width="560" height="240" fill="#0b0e14" opacity=".62"/>
         <text id="ovt" x="280" y="104" text-anchor="middle" fill="#e6e6e6" font-size="20" font-weight="700">Don't Get Chased by Streichian</text>
-        <text id="ovs" x="280" y="136" text-anchor="middle" fill="#8a93a6" font-size="14">click to start · avoid the seaweed!</text></g>
+        <text id="ovs" x="280" y="136" text-anchor="middle" fill="#8a93a6" font-size="14">click to start &middot; avoid seaweed, grab the jet</text></g>
       <text id="score" x="548" y="24" text-anchor="end" fill="#cbd5e1" font-size="15" font-weight="700">0</text>
       <text id="gap" x="12" y="24" fill="#86efac" font-size="12"></text>
     </svg>
   </div>
 </div>
 <script>
-const GAME="chase";
-const SVGNS="http://www.w3.org/2000/svg";
-const svg=document.getElementById("game"), fish=document.getElementById("fish"), ftilt=document.getElementById("ftilt");
-const pi=document.getElementById("pi"), lL=document.getElementById("lL"), lR=document.getElementById("lR");
-const weedsG=document.getElementById("weeds"), overlay=document.getElementById("overlay");
-const ovt=document.getElementById("ovt"), ovs=document.getElementById("ovs");
-const scoreT=document.getElementById("score"), gapT=document.getElementById("gap"), bestT=document.getElementById("best");
-const flash=document.getElementById("flash");
+const GAME="chase", SVGNS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const svg=$("game"), fish=$("fish"), ftilt=$("ftilt"), pi=$("pi"), lL=$("lL"), lR=$("lR");
+const weedsG=$("weeds"), overlay=$("overlay"), ovt=$("ovt"), ovs=$("ovs");
+const scoreT=$("score"), gapT=$("gap"), bestT=$("best"), flash=$("flash"), jetflash=$("jetflash");
+const jetpow=$("jetpow"), jetpowtilt=$("jetpowtilt"), ridejet=$("ridejet"), fireG=$("fire");
 
-// use real photo if present
-const img=new Image(); img.onload=()=>{document.getElementById("pihead").style.display="none";document.getElementById("piphoto").style.display="";}; img.src="/streichian.png";
+const img=new Image(); img.onload=()=>{$("pihead").style.display="none";$("piphoto").style.display="";}; img.src="/streichian.png";
 
-const PLAYER_X=250, GROUND=178, G=2400, JUMP=-720;
+// flames for the jet
+let flames=[];
+for(let i=0;i<3;i++){const fl=document.createElementNS(SVGNS,"path");
+  fl.setAttribute("d","M0,0 L-16,-6 L-26,0 L-16,6 Z");
+  fl.setAttribute("fill",i===0?"#fbbf24":i===1?"#f97316":"#ef4444");
+  fireG.appendChild(fl);flames.push(fl);}
+
+const PLAYER_X=250, GROUND=178, CRUISE=86, G=2400, JUMP=-720;
 let parentBest=+(localStorage.getItem("zc_best")||0); bestT.textContent=parentBest;
 addEventListener("message",e=>{if(e&&e.data&&e.data.type==="best"){parentBest=Math.max(parentBest,e.data.best|0);bestT.textContent=parentBest;}});
 try{parent.postMessage({type:"ready",game:GAME},"*");}catch(e){}
 
 let state="ready", y=GROUND, vy=0, t=0, v=270, gap=175, score=0, weeds=[], spawn=1, slowUntil=0;
+let jetPow=null, jetMode=false, jetUntil=0, nextJet=300;
 
-function reset(){weeds.forEach(w=>w.el.remove());weeds=[];y=GROUND;vy=0;t=0;v=270;gap=175;score=0;spawn=1;slowUntil=0;}
+function reset(){
+  weeds.forEach(w=>w.el.remove()); weeds=[];
+  y=GROUND;vy=0;t=0;v=270;gap=175;score=0;spawn=1;slowUntil=0;
+  jetPow=null;jetMode=false;jetUntil=0;nextJet=300;
+  jetpow.style.display="none";ridejet.style.display="none";
+}
 function start(){reset();state="run";overlay.style.display="none";}
 function over(){
-  state="over";
-  const sc=Math.floor(score);
+  state="over"; const sc=Math.floor(score);
   if(sc>parentBest){parentBest=sc;localStorage.setItem("zc_best",sc);bestT.textContent=sc;}
   try{parent.postMessage({type:"gameover",game:GAME,score:sc},"*");}catch(e){}
   ovt.textContent="Caught!  "+sc; ovs.textContent="click to run again"; overlay.style.display="";
 }
-function jump(){ if(state!=="run"){start();return;} if(y>=GROUND-0.5)vy=JUMP; }
+function jump(){ if(state!=="run"){start();return;} if(!jetMode && y>=GROUND-0.5)vy=JUMP; }
 
 function spawnWeed(){
-  const g=document.createElementNS(SVGNS,"path");
-  const h=20+Math.random()*22;
+  const g=document.createElementNS(SVGNS,"path"); const h=20+Math.random()*22;
   g.setAttribute("d",`M0,0 q-5,${-h*0.4} 0,${-h*0.7} q5,${-h*0.3} 0,${-h} q-6,3 -8,${-h*0.3} q3,4 8,${-h*0.6} q-7,1 -6,${-h*0.2} q4,3 6,0 Z`);
   g.setAttribute("fill","#22c55e");g.setAttribute("stroke","#16a34a");g.setAttribute("stroke-width","1");g.setAttribute("opacity",".9");
   weedsG.appendChild(g); weeds.push({el:g,x:580,h:h,hit:false});
 }
 let last=performance.now();
 function frame(now){
-  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  const dt=Math.min(0.05,(now-last)/1000); last=now; const ns=now/1000;
   if(state==="run"){
     t+=dt; v=270+t*10;
-    const slowed=now/1000<slowUntil;
-    const pv=slowed? v*0.45 : v;          // player speed (slow after a hit)
-    score+=dt*pv*0.06;
-    scoreT.textContent=Math.floor(score);
+    if(jetMode && ns>jetUntil){ jetMode=false; ridejet.style.display="none"; vy=-80; }
+    const slowed=ns<slowUntil;
+    const pv = jetMode ? v*2.5 : (slowed ? v*0.45 : v);
+    score+=dt*pv*0.06; scoreT.textContent=Math.floor(score);
 
-    // gap shrinks while you're slowed (PI keeps full speed)
+    // gap shrinks when slowed; grows when flying
     gap += (pv - v)*dt;
-    if(gap<=0){ over(); }
-    gapT.textContent="lead "+Math.max(0,Math.round(gap));
+    if(gap>556) gap=556;
+    if(!jetMode && gap<=0){ over(); }
+    gapT.textContent = jetMode ? "JET MODE!" : "lead "+Math.max(0,Math.round(gap));
 
     // physics
-    vy+=G*dt; y+=vy*dt; if(y>GROUND){y=GROUND;vy=0;}
+    if(jetMode){ y += (CRUISE - y)*Math.min(1,dt*7); vy=0; }
+    else { vy+=G*dt; y+=vy*dt; if(y>GROUND){y=GROUND;vy=0;} }
     fish.setAttribute("transform",`translate(${PLAYER_X},${y})`);
-    ftilt.setAttribute("transform",`rotate(${Math.max(-20,Math.min(20,vy*0.02))})`);
+    ftilt.setAttribute("transform",`rotate(${jetMode?-8:Math.max(-20,Math.min(20,vy*0.02))})`);
 
-    // PI position + running legs
+    // ride jet render + flames
+    if(jetMode){
+      ridejet.style.display="";
+      ridejet.setAttribute("transform",`translate(${PLAYER_X-2},${y+15})`);
+      flames.forEach((fl,i)=>{const s=0.6+Math.random()*0.9;
+        fl.setAttribute("transform",`translate(${-24-i*7},0) scale(${s},${s})`);
+        fl.setAttribute("opacity",0.5+Math.random()*0.5);});
+    }
+
+    // PI position + legs
     const piX=PLAYER_X-gap;
     pi.setAttribute("transform",`translate(${piX},196)`);
     const sw=Math.sin(t*16)*6; lL.setAttribute("y",-14+Math.max(0,sw)); lR.setAttribute("y",-14+Math.max(0,-sw));
+
+    // spawn jet powerup past the threshold
+    if(!jetMode && !jetPow && score>=nextJet){ jetPow={x:600,y:118}; jetpow.style.display=""; nextJet+=500; }
+    if(jetPow){
+      jetPow.x-=pv*dt; jetpow.setAttribute("transform",`translate(${jetPow.x},${jetPow.y})`);
+      jetpowtilt.setAttribute("transform",`rotate(${Math.sin(t*4)*8})`);
+      if(Math.abs(jetPow.x-PLAYER_X)<28 && Math.abs(y-jetPow.y)<30){
+        jetMode=true; jetUntil=ns+5; gap=Math.min(556, gap+360);   // blast Sebastian back
+        jetPow=null; jetpow.style.display="none";
+        jetflash.setAttribute("opacity","1"); setTimeout(()=>jetflash.setAttribute("opacity","0"),180);
+      } else if(jetPow.x<-40){ jetPow=null; jetpow.style.display="none"; }
+    }
 
     // weeds
     spawn-=dt; if(spawn<=0){spawnWeed();spawn=Math.max(0.7,1.5-t*0.02)*(0.8+Math.random()*0.7);}
     for(const w of weeds){
       w.x-=pv*dt; w.el.setAttribute("transform",`translate(${w.x},196)`);
-      if(!w.hit && Math.abs(w.x-PLAYER_X)<18 && (y> GROUND-w.h*0.5)){
-        w.hit=true; slowUntil=now/1000+1.1; flash.setAttribute("opacity","1");
+      if(!jetMode && !w.hit && Math.abs(w.x-PLAYER_X)<18 && (y>GROUND-w.h*0.5)){
+        w.hit=true; slowUntil=ns+1.1; flash.setAttribute("opacity","1");
         setTimeout(()=>flash.setAttribute("opacity","0"),140);
       }
     }
