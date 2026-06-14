@@ -86,6 +86,9 @@ function Login() {
           style={{ background: "none", border: "none", color: "#3b82f6", cursor: "pointer", fontSize: 13 }}>
           {mode === "signin" ? "Need an account? Sign up" : "Have an account? Sign in"}
         </button>
+        <p style={{ textAlign: "center", color: "#475569", fontSize: 12, marginTop: 14, marginBottom: 0 }}>
+          built by Mike &middot; powered by laziness &amp; not wanting to open VNC
+        </p>
       </div>
     </div>
   );
@@ -117,6 +120,14 @@ function App({ user }: { user: any }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [helpOpen, setHelpOpen] = useState(false);
   const [showAllRuns, setShowAllRuns] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [pName, setPName] = useState("");
+  const [pDesc, setPDesc] = useState("");
+  const [myAvatar, setMyAvatar] = useState<string | null>(null);
+  const [pSaving, setPSaving] = useState(false);
+  const [pMsg, setPMsg] = useState<string | null>(null);
+  const [profileVersion, setProfileVersion] = useState(0);
+  const avatarRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     try {
@@ -134,6 +145,23 @@ function App({ user }: { user: any }) {
     const m = rawImage.match(/TP(\d+)/i);
     if (m) setTimepoint(Number(m[1]));
   }, [rawImage]);
+
+  useEffect(() => {
+    supabase.from("profiles").select("name,description,avatar_url").eq("user_id", user.id).maybeSingle()
+      .then(({ data }) => { if (data) { setPName(data.name || ""); setPDesc(data.description || ""); setMyAvatar(data.avatar_url || null); } });
+  }, []); // eslint-disable-line
+
+  async function saveProfile() {
+    setPSaving(true); setPMsg(null);
+    const fd = new FormData();
+    fd.append("userId", user.id); fd.append("name", pName); fd.append("description", pDesc);
+    const file = avatarRef.current?.files?.[0]; if (file) fd.append("file", file);
+    const res = await fetch("/api/profile", { method: "POST", body: fd });
+    const out = await res.json();
+    if (res.ok) { if (out.avatar_url) setMyAvatar(out.avatar_url); setPMsg("Saved"); setProfileVersion((v) => v + 1); if (avatarRef.current) avatarRef.current.value = ""; }
+    else setPMsg("Error: " + out.error);
+    setPSaving(false);
+  }
 
   async function load() {
     const { data: c } = await supabase.from("classifiers").select("marker,stage,trained,ilp_path").eq("active", true).order("marker");
@@ -202,9 +230,32 @@ function App({ user }: { user: any }) {
     <div>
       {/* top bar */}
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 8 }}>
-        <span style={dim}>{user.email}</span>
+        {myAvatar && <img src={myAvatar} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", border: "1px solid #1f2633" }} />}
+        <span style={dim}>{pName || user.email}</span>
+        <button onClick={() => setProfileOpen(!profileOpen)} style={ghost}>Profile</button>
         <button onClick={() => supabase.auth.signOut()} style={{ ...ghost, display: "inline-flex", alignItems: "center", gap: 6 }}><Out /> Sign out</button>
       </div>
+      {profileOpen && (
+        <div style={card}>
+          <h2 style={h2}>Your profile</h2>
+          <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ width: 76, height: 76, borderRadius: "50%", overflow: "hidden", border: "1px solid #1f2633", background: "#0b0e14", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {myAvatar ? <img src={myAvatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ ...dim, fontSize: 11 }}>no pic</span>}
+              </div>
+              <input ref={avatarRef} type="file" accept="image/*" style={{ fontSize: 11, color: "#cbd5e1", marginTop: 8, width: 134 }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 220, display: "grid", gap: 8 }}>
+              <input value={pName} onChange={(e) => setPName(e.target.value)} placeholder="display name" style={input} />
+              <textarea value={pDesc} onChange={(e) => setPDesc(e.target.value)} placeholder="short description (role, fun fact...)" rows={3} style={{ ...input, resize: "vertical", fontFamily: "inherit" }} />
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button onClick={saveProfile} disabled={pSaving} style={btn}>{pSaving ? "Saving..." : "Save profile"}</button>
+                {pMsg && <span style={dim}>{pMsg}</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* How to use */}
       <div style={card}>
@@ -355,19 +406,19 @@ function App({ user }: { user: any }) {
         </button>
       )}
 
-      <Games user={user} />
+      <Games user={user} pv={profileVersion} />
     </div>
   );
 }
 
-function Games({ user }: { user: any }) {
+function Games({ user, pv }: { user: any; pv: number }) {
   const GAMES: Record<string, { src: string; name: string }> = {
     fish:  { src: "/fish-game.html",  name: "Zebrafish Runner" },
     chase: { src: "/chase-game.html", name: "Don't Get Chased by Streichian" },
   };
-  const myName = (user.email?.split("@")[0]) || "anon";
   const [bests, setBests] = useState<Record<string, number>>({ fish: 0, chase: 0 });
   const [lb, setLb] = useState<any[]>([]);
+  const [profs, setProfs] = useState<Record<string, any>>({});
   const [sel, setSel] = useState<string>("fish");
   const ref = useRef<HTMLIFrameElement>(null);
 
@@ -376,10 +427,13 @@ function Games({ user }: { user: any }) {
     const b: Record<string, number> = { fish: 0, chase: 0 };
     (mine ?? []).forEach((r: any) => { b[r.game] = r.best; });
     setBests(b);
-    const { data: all } = await supabase.from("game_scores").select("game,name,best").order("best", { ascending: false });
+    const { data: all } = await supabase.from("game_scores").select("user_id,game,best").order("best", { ascending: false });
     setLb(all ?? []);
+    const { data: pr } = await supabase.from("profiles").select("user_id,name,avatar_url");
+    const m: Record<string, any> = {}; (pr ?? []).forEach((p: any) => { m[p.user_id] = p; });
+    setProfs(m);
   }
-  useEffect(() => { loadAll(); }, []); // eslint-disable-line
+  useEffect(() => { loadAll(); }, [pv]); // eslint-disable-line
 
   function postBest() { ref.current?.contentWindow?.postMessage({ type: "best", best: bests[sel] || 0 }, "*"); }
   useEffect(() => { postBest(); }, [bests, sel]); // eslint-disable-line
@@ -394,7 +448,7 @@ function Games({ user }: { user: any }) {
         if (sc > (bests[d.game] || 0)) {
           setBests({ ...bests, [d.game]: sc });
           await supabase.from("game_scores").upsert(
-            { user_id: user.id, game: d.game, best: sc, name: myName, updated_at: new Date().toISOString() },
+            { user_id: user.id, game: d.game, best: sc, name: (user.email?.split("@")[0] || "anon"), updated_at: new Date().toISOString() },
             { onConflict: "user_id,game" });
           loadAll();
         }
@@ -404,7 +458,11 @@ function Games({ user }: { user: any }) {
     return () => window.removeEventListener("message", onMsg);
   }, [bests, sel]); // eslint-disable-line
 
-  const rows = lb.filter((r) => r.game === sel).slice(0, 8);
+  const fullList = lb.filter((r) => r.game === sel);
+  const rows = fullList.slice(0, 8);
+  const myRank = fullList.findIndex((r) => r.user_id === user.id) + 1;
+  const nameOf = (uid: string) => profs[uid]?.name || "anon";
+
   return (
     <div style={{ marginTop: 28 }}>
       <h2 style={{ ...h2, fontSize: 14, color: "#64748b", marginBottom: 10 }}>While you wait &mdash; pick a game, beat the lab</h2>
@@ -424,18 +482,27 @@ function Games({ user }: { user: any }) {
         <iframe ref={ref} key={sel} src={GAMES[sel].src} title={GAMES[sel].name} scrolling="no" onLoad={postBest}
           style={{ width: "100%", height: 430, border: "1px solid #1f2633", borderRadius: 12, background: "#0d1422" }} />
         <div style={{ ...card, marginBottom: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#fbbf24", fontWeight: 700, marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#fbbf24", fontWeight: 700, marginBottom: 4 }}>
             <Trophy /> Leaderboard
           </div>
+          <div style={{ ...dim, fontSize: 12, marginBottom: 8 }}>
+            {myRank > 0 ? `you're #${myRank} of ${fullList.length}` : "no score yet"}
+          </div>
           {rows.length === 0 && <div style={dim}>No scores yet &mdash; be the first!</div>}
-          {rows.map((r, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, padding: "4px 0", fontSize: 13,
-              color: r.name === myName ? "#60a5fa" : "#cbd5e1", fontWeight: r.name === myName ? 700 : 400 }}>
-              <span style={{ width: 22, color: i < 3 ? "#fbbf24" : "#64748b" }}>#{i + 1}</span>
-              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name || "anon"}{r.name === myName ? " (you)" : ""}</span>
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>{r.best}</span>
-            </div>
-          ))}
+          {rows.map((r, i) => {
+            const me = r.user_id === user.id;
+            const av = profs[r.user_id]?.avatar_url;
+            return (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", fontSize: 13,
+                color: me ? "#60a5fa" : "#cbd5e1", fontWeight: me ? 700 : 400 }}>
+                <span style={{ width: 20, color: i < 3 ? "#fbbf24" : "#64748b" }}>#{i + 1}</span>
+                {av ? <img src={av} alt="" style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover" }} />
+                    : <span style={{ width: 20, height: 20, borderRadius: "50%", background: "#1f2633", display: "inline-block" }} />}
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nameOf(r.user_id)}{me ? " (you)" : ""}</span>
+                <span style={{ fontVariantNumeric: "tabular-nums" }}>{r.best}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
