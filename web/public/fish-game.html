@@ -84,6 +84,9 @@ const bestT=document.getElementById("best");
 
 const GROUND=180, FISH_X=110, G=2400, JUMP=-740;
 let best=+(localStorage.getItem("zf_best")||0); bestT.textContent=best;
+const GAME="fish";
+addEventListener("message",e=>{if(e&&e.data&&e.data.type==="best"){best=Math.max(best,e.data.best|0);bestT.textContent=best;}});
+try{parent.postMessage({type:"ready",game:GAME},"*");}catch(e){}
 
 let state="ready"; // ready | run | over
 let y=GROUND, vy=0, t=0, speed=300, spawn=0, score=0, rocks=[];
@@ -105,6 +108,7 @@ function start(){ reset(); state="run"; overlay.style.display="none"; }
 function gameOver(){
   state="over";
   best=Math.max(best,Math.floor(score)); localStorage.setItem("zf_best",best); bestT.textContent=best;
+  try{parent.postMessage({type:"gameover",game:GAME,score:Math.floor(score)},"*");}catch(e){}
   ovTitle.textContent="💥  "+Math.floor(score);
   ovSub.textContent="click to try again";
   overlay.style.display="";

@@ -354,10 +354,62 @@ function App({ user }: { user: any }) {
         </button>
       )}
 
-      <div style={{ marginTop: 28 }}>
-        <h2 style={{ ...h2, fontSize: 14, color: "#64748b", marginBottom: 8 }}>While you wait &mdash; Zebrafish Runner (press space)</h2>
-        <iframe src="/fish-game.html" title="Zebrafish Runner" scrolling="no"
-          style={{ width: "100%", height: 340, border: "1px solid #1f2633", borderRadius: 12, background: "#0d1422" }} />
+      <Games user={user} />
+    </div>
+  );
+}
+
+function Games({ user }: { user: any }) {
+  const [bests, setBests] = useState<Record<string, number>>({ fish: 0, chase: 0 });
+  const fishRef = useRef<HTMLIFrameElement>(null);
+  const chaseRef = useRef<HTMLIFrameElement>(null);
+
+  async function loadScores() {
+    const { data } = await supabase.from("game_scores").select("game,best").eq("user_id", user.id);
+    const b: Record<string, number> = { fish: 0, chase: 0 };
+    (data ?? []).forEach((r: any) => { b[r.game] = r.best; });
+    setBests(b);
+  }
+  useEffect(() => { loadScores(); }, []); // eslint-disable-line
+
+  function post(ref: React.RefObject<HTMLIFrameElement>, game: string, b: Record<string, number>) {
+    ref.current?.contentWindow?.postMessage({ type: "best", best: b[game] || 0 }, "*");
+  }
+  useEffect(() => { post(fishRef, "fish", bests); post(chaseRef, "chase", bests); }, [bests]);
+
+  useEffect(() => {
+    async function onMsg(e: MessageEvent) {
+      const d: any = e.data;
+      if (!d || !d.game) return;
+      if (d.type === "ready") {
+        post(d.game === "chase" ? chaseRef : fishRef, d.game, bests);
+      } else if (d.type === "gameover") {
+        const sc = Math.floor(d.score || 0);
+        if (sc > (bests[d.game] || 0)) {
+          setBests({ ...bests, [d.game]: sc });
+          await supabase.from("game_scores").upsert(
+            { user_id: user.id, game: d.game, best: sc, updated_at: new Date().toISOString() },
+            { onConflict: "user_id,game" });
+        }
+      }
+    }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [bests]); // eslint-disable-line
+
+  const frame: React.CSSProperties = { width: "100%", height: 300, border: "1px solid #1f2633", borderRadius: 12, background: "#0d1422" };
+  return (
+    <div style={{ marginTop: 28 }}>
+      <h2 style={{ ...h2, fontSize: 14, color: "#64748b", marginBottom: 8 }}>While you wait &mdash; high scores are saved to your account</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 4 }}>Zebrafish Runner &middot; best {bests.fish}</div>
+          <iframe ref={fishRef} src="/fish-game.html" title="Zebrafish Runner" scrolling="no" onLoad={() => post(fishRef, "fish", bests)} style={frame} />
+        </div>
+        <div>
+          <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 4 }}>Don&rsquo;t Get Chased by Streichian &middot; best {bests.chase}</div>
+          <iframe ref={chaseRef} src="/chase-game.html" title="Chase" scrolling="no" onLoad={() => post(chaseRef, "chase", bests)} style={frame} />
+        </div>
       </div>
     </div>
   );
