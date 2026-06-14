@@ -1,0 +1,39 @@
+# Copy to config.toml on EACH machine and edit. Only `capabilities` differs between boxes.
+
+[supabase]
+url = "https://YOUR-PROJECT.supabase.co"
+# SERVICE ROLE key (Project Settings -> API). Keep this secret; workers only.
+service_role_key = "eyJ...service-role..."
+
+[machine]
+# Unique per box. Examples below show the three-machine split.
+name = "school-ilastik"
+# School box: it has the downsample env + Ilastik installed.
+capabilities = ["downsample", "ilastik_predict"]
+
+# --- Mike's computer (Blender) would instead use: ---------------------------
+# name = "mike-blender"
+# capabilities = ["mesh", "blender_pullback"]
+
+# --- The Fiji box would instead use: ----------------------------------------
+# name = "fiji-box"
+# capabilities = ["fiji_measure"]
+
+[storage]
+# How artifacts move between machines. See ARCHITECTURE.md §4.
+#   backend = "shared"   -> all machines mount the same drive; we just pass paths
+#   backend = "supabase" -> upload/download via Supabase Storage bucket
+backend = "shared"
+# For backend="shared": the common mount point on THIS machine.
+# (Same logical location, possibly different drive letter per machine.)
+shared_root = "Z:/zebrafish"        # e.g. "/mnt/lab-nas/zebrafish" on Linux
+# For backend="supabase":
+# bucket = "artifacts"
+
+[tools]
+# Absolute paths to the headless executables on THIS machine. Leave blank if N/A here.
+ilastik = "C:/Program Files/ilastik-1.4.0/ilastik.exe"
+blender = "C:/Program Files/Blender Foundation/Blender 4.2/blender.exe"
+fiji    = "C:/Fiji.app/ImageJ-win64.exe"
+# Python env that has blender_tissue_cartography / igl / pymeshlab for downsample+mesh:
+python  = "python"

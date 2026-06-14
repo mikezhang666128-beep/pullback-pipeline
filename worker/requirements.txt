@@ -1,0 +1,8 @@
+# Worker agent core deps (small — heavy science libs live in your existing env)
+supabase>=2.4
+tomli>=2.0 ; python_version < "3.11"
+
+# The downsample/mesh steps call into YOUR existing scientific environment
+# (numpy, igl, pymeshlab, blender_tissue_cartography, scikit-image, scipy, Pillow, tqdm).
+# Keep using the conda/venv you already run the Jupyter notebook in — the worker can
+# shell out to it via [tools].python, OR install the agent into that same env.

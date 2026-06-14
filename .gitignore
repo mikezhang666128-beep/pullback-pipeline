@@ -1,0 +1,22 @@
+# secrets / config
+worker/config.toml
+**/.env.local
+**/*service*account*.json
+sheet_sync/*.json
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# node / next
+web/node_modules/
+web/.next/
+node_modules/
+
+# data / scratch
+*.h5
+*.tif
+01_ds_data/
+02_meshes/
+03_pullbacks/
