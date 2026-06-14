@@ -69,7 +69,6 @@ export default function Home() {
 
   const markers = Array.from(new Set(classifiers.map((c) => c.marker)));
   const stagesFor = (m: string) => Array.from(new Set(classifiers.filter((c) => c.marker === m).map((c) => c.stage)));
-  // keep stage valid for the chosen marker
   useEffect(() => {
     const st = stagesFor(marker);
     if (marker && st.length && !st.includes(stage)) setStage(st[0]);
@@ -100,11 +99,22 @@ export default function Home() {
     await load(); setUploading(false);
   }
 
+  async function deleteClassifier(m: string, s: string) {
+    if (!confirm(`Delete classifier  ${m} @ ${s || "(no stage)"} ?`)) return;
+    await fetch("/api/classifiers", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ marker: m, stage: s }),
+    });
+    await load();
+  }
+
   const runIds = (Array.from(new Set(jobs.map((j) => j.run_id).filter(Boolean))) as string[]).reverse();
   const selected = classifiers.find((c) => c.marker === marker && c.stage === stage);
+  const noStages = marker && stagesFor(marker).length === 0;
 
   return (
     <div>
+      {/* ---- Run ---- */}
       <div style={card}>
         <h2 style={h2}>Run</h2>
         <div style={grid}>
@@ -112,10 +122,25 @@ export default function Home() {
           <select value={marker} onChange={(e) => setMarker(e.target.value)} style={input}>
             {markers.map((m) => (<option key={m} value={m}>{m}</option>))}
           </select>
+
           <label>Stage</label>
-          <select value={stage} onChange={(e) => setStage(e.target.value)} style={input}>
-            {stagesFor(marker).map((s) => (<option key={s} value={s}>{s || "(no stage)"}</option>))}
-          </select>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {stagesFor(marker).map((s) => {
+              const c = classifiers.find((x) => x.marker === marker && x.stage === s);
+              const sel = s === stage;
+              const col = c?.trained ? "#22c55e" : "#f59e0b";
+              return (
+                <button key={s} onClick={() => setStage(s)} style={{
+                  ...chip, borderColor: col, color: sel ? "#0b0e14" : col,
+                  background: sel ? col : "transparent", fontWeight: sel ? 700 : 500,
+                }}>
+                  {s || "—"} {c?.trained ? "✓" : "· untrained"}
+                </button>
+              );
+            })}
+            {noStages && <span style={dim}>no classifier yet — upload one below ↓</span>}
+          </div>
+
           <label>Raw image</label>
           <input value={rawImage} onChange={(e) => setRawImage(e.target.value)} placeholder="/mnt/crunch/.../TP0_pMyo_crop.tif" style={input} />
           <label>Timepoint</label>
@@ -129,40 +154,43 @@ export default function Home() {
           </select>
         </div>
         {selected && !selected.trained && (
-          <p style={{ color: "#f59e0b", fontSize: 13, marginTop: 10 }}>⚠ {selected.marker} @ {selected.stage} isn’t fully trained — upload a trained .ilp below.</p>
-        )}
-        {marker && !selected && (
-          <p style={{ color: "#f59e0b", fontSize: 13, marginTop: 10 }}>⚠ No classifier for {marker} @ {stage || "this stage"} — upload one below.</p>
+          <p style={{ color: "#f59e0b", fontSize: 13, marginTop: 10 }}>⚠ {selected.marker} @ {selected.stage} isn’t fully trained — results may be poor.</p>
         )}
         <div style={{ marginTop: 14, display: "flex", gap: 12, alignItems: "center" }}>
-          <button onClick={runPipeline} disabled={busy || !rawImage || !marker} style={btn}>
+          <button onClick={runPipeline} disabled={busy || !rawImage || !marker || !selected} style={btn}>
             {busy ? "Queuing…" : mode === "mesh" ? "▶ Generate mesh" : "▶ Run pullback"}
           </button>
           {msg && <span style={dim}>{msg}</span>}
         </div>
       </div>
 
+      {/* ---- Classifier library ---- */}
       <div style={card}>
         <h2 style={h2}>Classifier library</h2>
         {classifiers.length === 0 && <p style={dim}>None yet. Upload a trained .ilp below.</p>}
         {classifiers.map((c, i) => (
-          <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", padding: "4px 0" }}>
-            <strong style={{ minWidth: 70 }}>{c.marker}</strong>
-            <span style={{ ...pill, borderColor: "#3b82f6", color: "#93c5fd", minWidth: 50, textAlign: "center" }}>{c.stage || "—"}</span>
-            <span style={{ ...pill, borderColor: c.trained ? "#22c55e" : "#f59e0b", color: c.trained ? "#22c55e" : "#f59e0b" }}>{c.trained ? "trained" : "not trained"}</span>
-            <code style={{ color: "#64748b", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.ilp_path}</code>
+          <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", padding: "5px 0" }}>
+            <strong style={{ minWidth: 64 }}>{c.marker}</strong>
+            <span style={{ ...pill, borderColor: "#3b82f6", color: "#93c5fd", minWidth: 46, textAlign: "center" }}>{c.stage || "—"}</span>
+            <span style={{ ...pill, borderColor: c.trained ? "#22c55e" : "#f59e0b", color: c.trained ? "#22c55e" : "#f59e0b" }}>{c.trained ? "trained" : "untrained"}</span>
+            <code style={{ flex: 1, color: "#64748b", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.ilp_path}</code>
+            <button onClick={() => deleteClassifier(c.marker, c.stage)} title="delete" style={delBtn}>✕</button>
           </div>
         ))}
-        <div style={{ borderTop: "1px solid #1f2633", marginTop: 12, paddingTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <input ref={fileRef} type="file" accept=".ilp,.ilp2" style={{ color: "#cbd5e1", fontSize: 13 }} />
-          <input value={upMarker} onChange={(e) => setUpMarker(e.target.value)} placeholder="marker" style={{ ...input, width: 110 }} />
-          <input value={upStage} onChange={(e) => setUpStage(e.target.value)} placeholder="stage (e.g. 6hpf)" style={{ ...input, width: 130 }} />
-          <input type="number" value={upChannel} onChange={(e) => setUpChannel(Number(e.target.value))} title="channel" style={{ ...input, width: 65 }} />
-          <button onClick={uploadClassifier} disabled={uploading} style={btn}>{uploading ? "Uploading…" : "⬆ Upload .ilp"}</button>
-          {upMsg && <span style={dim}>{upMsg}</span>}
+        <div style={{ borderTop: "1px solid #1f2633", marginTop: 12, paddingTop: 12 }}>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Upload / swap a trained classifier:</div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <input ref={fileRef} type="file" accept=".ilp,.ilp2" style={{ color: "#cbd5e1", fontSize: 13 }} />
+            <input value={upMarker} onChange={(e) => setUpMarker(e.target.value)} placeholder="marker" style={{ ...input, width: 110 }} />
+            <input value={upStage} onChange={(e) => setUpStage(e.target.value)} placeholder="stage (e.g. 6hpf)" style={{ ...input, width: 130 }} />
+            <input type="number" value={upChannel} onChange={(e) => setUpChannel(Number(e.target.value))} title="channel" style={{ ...input, width: 65 }} />
+            <button onClick={uploadClassifier} disabled={uploading} style={btn}>{uploading ? "Uploading…" : "⬆ Upload .ilp"}</button>
+            {upMsg && <span style={dim}>{upMsg}</span>}
+          </div>
         </div>
       </div>
 
+      {/* ---- Runs ---- */}
       {runIds.length === 0 && <p style={dim}>No runs yet.</p>}
       {runIds.map((rid) => {
         const rj = jobs.filter((j) => j.run_id === rid).sort((a, b) => STEP_ORDER.indexOf(a.capability) - STEP_ORDER.indexOf(b.capability));
@@ -197,6 +225,8 @@ const card: React.CSSProperties = { border: "1px solid #1f2633", borderRadius: 1
 const h2: React.CSSProperties = { margin: "0 0 14px", fontSize: 18 };
 const grid: React.CSSProperties = { display: "grid", gridTemplateColumns: "120px 1fr", gap: 10, alignItems: "center" };
 const btn: React.CSSProperties = { background: "#2563eb", color: "white", border: "none", borderRadius: 8, padding: "9px 16px", cursor: "pointer", fontSize: 14 };
+const delBtn: React.CSSProperties = { background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontSize: 12 };
 const pill: React.CSSProperties = { border: "1px solid", borderRadius: 999, padding: "3px 10px", fontSize: 12 };
+const chip: React.CSSProperties = { border: "1px solid", borderRadius: 8, padding: "5px 12px", fontSize: 13, cursor: "pointer" };
 const input: React.CSSProperties = { background: "#0b0e14", color: "#e5e7eb", border: "1px solid #1f2633", borderRadius: 8, padding: "8px 10px", fontSize: 14 };
 const dim: React.CSSProperties = { color: "#8a93a6", fontSize: 14 };
