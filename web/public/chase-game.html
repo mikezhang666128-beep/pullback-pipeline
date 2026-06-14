@@ -25,6 +25,7 @@
       <rect width="560" height="240" fill="url(#sky)"/>
       <line x1="0" y1="196" x2="560" y2="196" stroke="#22324a" stroke-width="2"/>
       <g id="weeds"></g>
+      <g id="rockets"></g>
 
       <!-- PI chaser -->
       <g id="pi" transform="translate(70,196)">
@@ -84,7 +85,7 @@
 const GAME="chase", SVGNS="http://www.w3.org/2000/svg";
 const $=id=>document.getElementById(id);
 const svg=$("game"), fish=$("fish"), ftilt=$("ftilt"), pi=$("pi"), lL=$("lL"), lR=$("lR");
-const weedsG=$("weeds"), overlay=$("overlay"), ovt=$("ovt"), ovs=$("ovs");
+const weedsG=$("weeds"), rocketsG=$("rockets"), overlay=$("overlay"), ovt=$("ovt"), ovs=$("ovs");
 const scoreT=$("score"), gapT=$("gap"), bestT=$("best"), flash=$("flash"), jetflash=$("jetflash");
 const jetpow=$("jetpow"), jetpowtilt=$("jetpowtilt"), ridejet=$("ridejet"), fireG=$("fire");
 
@@ -104,12 +105,14 @@ try{parent.postMessage({type:"ready",game:GAME},"*");}catch(e){}
 
 let state="ready", y=GROUND, vy=0, t=0, v=270, gap=175, score=0, weeds=[], spawn=1, slowUntil=0;
 let jetPow=null, jetMode=false, jetUntil=0, nextJet=300;
+let rockets=[], nextRocketAt=0;
 
 function reset(){
   weeds.forEach(w=>w.el.remove()); weeds=[];
   y=GROUND;vy=0;t=0;v=270;gap=175;score=0;spawn=1;slowUntil=0;
   jetPow=null;jetMode=false;jetUntil=0;nextJet=300;
   jetpow.style.display="none";ridejet.style.display="none";
+  rockets.forEach(r=>r.el.remove());rockets=[];nextRocketAt=0;
 }
 function start(){reset();state="run";overlay.style.display="none";}
 function over(){
@@ -125,6 +128,18 @@ function spawnWeed(){
   g.setAttribute("d",`M0,0 q-5,${-h*0.4} 0,${-h*0.7} q5,${-h*0.3} 0,${-h} q-6,3 -8,${-h*0.3} q3,4 8,${-h*0.6} q-7,1 -6,${-h*0.2} q4,3 6,0 Z`);
   g.setAttribute("fill","#22c55e");g.setAttribute("stroke","#16a34a");g.setAttribute("stroke-width","1");g.setAttribute("opacity",".9");
   weedsG.appendChild(g); weeds.push({el:g,x:580,h:h,hit:false});
+}
+function mkP(d,fill){const p=document.createElementNS(SVGNS,"path");p.setAttribute("d",d);p.setAttribute("fill",fill);return p;}
+function spawnRocket(){
+  const g=document.createElementNS(SVGNS,"g");
+  const fire=mkP("M-15,0 L-30,-6 L-40,0 L-30,6 Z","#fb923c");
+  g.appendChild(fire);
+  g.appendChild(mkP("M-15,0 L11,-4 L18,0 L11,4 Z","#ef4444"));
+  g.appendChild(mkP("M-7,-4 L-16,-11 L-2,-4 Z","#b91c1c"));
+  g.appendChild(mkP("M-7,4 L-16,11 L-2,4 Z","#b91c1c"));
+  g.appendChild(mkP("M7,-3 L7,3 L13,0 Z","#fde68a"));
+  rocketsG.appendChild(g);
+  rockets.push({el:g,fire:fire,x:600,y:166,hit:false});
 }
 let last=performance.now();
 function frame(now){
@@ -184,6 +199,21 @@ function frame(now){
       }
     }
     weeds=weeds.filter(w=>{if(w.x<-30){w.el.remove();return false;}return true;});
+
+    // rockets: after 600, every 5-10s, fast aerial hazard -> jump to dodge
+    if(score>=600){
+      if(nextRocketAt===0) nextRocketAt=ns+5+Math.random()*5;
+      if(ns>=nextRocketAt){ spawnRocket(); nextRocketAt=ns+5+Math.random()*5; }
+    }
+    const rspeed=Math.max(pv*1.7,430);
+    for(const r of rockets){
+      r.x-=rspeed*dt; r.el.setAttribute("transform",`translate(${r.x},${r.y})`);
+      const fs=0.6+Math.random()*0.8; r.fire.setAttribute("transform",`scale(${fs},${fs})`); r.fire.setAttribute("opacity",0.6+Math.random()*0.4);
+      if(!r.hit && !jetMode && Math.abs(r.x-PLAYER_X)<20 && y>GROUND-16){
+        r.hit=true; slowUntil=ns+1.1; flash.setAttribute("opacity","1"); setTimeout(()=>flash.setAttribute("opacity","0"),140);
+      }
+    }
+    rockets=rockets.filter(r=>{if(r.x<-44){r.el.remove();return false;}return true;});
   }
   requestAnimationFrame(frame);
 }

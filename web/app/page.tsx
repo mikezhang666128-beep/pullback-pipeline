@@ -293,7 +293,10 @@ function App({ user }: { user: any }) {
           <label>Timepoint</label>
           <input type="number" value={timepoint} onChange={(e) => setTimepoint(Number(e.target.value))} style={input} />
           <label>Output dir</label>
-          <input value={workDir} onChange={(e) => setWorkDir(e.target.value)} style={input} />
+          <div>
+            <input value={workDir} readOnly style={{ ...input, width: "100%", boxSizing: "border-box", color: "#8a93a6", cursor: "not-allowed" }} />
+            <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 4 }}>Results go to your own folder automatically.</div>
+          </div>
           <label>Output</label>
           <select value={mode} onChange={(e) => setMode(e.target.value as any)} style={input}>
             <option value="mesh">Mesh only — download the .obj (do the pullback in Blender)</option>
