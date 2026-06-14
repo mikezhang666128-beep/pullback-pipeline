@@ -30,6 +30,23 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [upMsg, setUpMsg] = useState<string | null>(null);
 
+  // remember form inputs across refreshes (no login yet)
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem("pb_form") || "{}");
+      if (v.marker) setMarker(v.marker);
+      if (v.rawImage) setRawImage(v.rawImage);
+      if (typeof v.timepoint === "number") setTimepoint(v.timepoint);
+      if (v.workDir) setWorkDir(v.workDir);
+      if (v.mode) setMode(v.mode);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem("pb_form", JSON.stringify({ marker, rawImage, timepoint, workDir, mode }));
+    } catch {}
+  }, [marker, rawImage, timepoint, workDir, mode]);
+
   async function load() {
     const { data: c } = await supabase.from("classifiers")
       .select("marker,trained,notes,ilp_path").eq("active", true).order("marker");
