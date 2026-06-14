@@ -151,6 +151,7 @@ export default function Home() {
         const meshJob = rj.find((j) => j.capability === "mesh");
         const meshArt = meshJob && artifacts.find((a) => a.job_id === meshJob.id && a.kind === "mesh");
         const meshUrl = meshArt?.meta?.download_url as string | undefined;
+        const meshName = (meshArt?.path?.split("/").pop()) || "mesh.obj";
         const pullJob = rj.find((j) => j.capability === "pullback");
         const pull = pullJob && artifacts.find((a) => a.job_id === pullJob.id && a.kind === "pullback");
         return (
@@ -162,7 +163,7 @@ export default function Home() {
             </div>
             {meshUrl && (
               <p style={{ marginTop: 12 }}>
-                <a href={meshUrl + (meshUrl.includes("?") ? "&" : "?") + "download"} style={{ color: "#3b82f6", fontWeight: 600, textDecoration: "none" }}>⬇ Download mesh (.obj)</a>
+                <a href={meshUrl + (meshUrl.includes("?") ? "&" : "?") + "download=" + encodeURIComponent(meshName)} style={{ color: "#3b82f6", fontWeight: 600, textDecoration: "none" }}>⬇ Download {meshName}</a>
                 <span style={{ ...dim, marginLeft: 10 }}>then UV + pullback in Blender</span>
               </p>
             )}
