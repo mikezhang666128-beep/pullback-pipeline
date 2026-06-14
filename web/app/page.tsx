@@ -15,6 +15,7 @@ const Chevron = ({ open }: { open: boolean }) => (<svg {...I({ style: { transfor
 const Out = () => (<svg {...I()}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>);
 const Clock = () => (<svg {...I()}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>);
 const Info = () => (<svg {...I()}><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>);
+const Trophy = () => (<svg {...I()}><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4zM7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3" /></svg>);
 
 function fmtDur(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -364,21 +365,23 @@ function Games({ user }: { user: any }) {
     fish:  { src: "/fish-game.html",  name: "Zebrafish Runner" },
     chase: { src: "/chase-game.html", name: "Don't Get Chased by Streichian" },
   };
+  const myName = (user.email?.split("@")[0]) || "anon";
   const [bests, setBests] = useState<Record<string, number>>({ fish: 0, chase: 0 });
+  const [lb, setLb] = useState<any[]>([]);
   const [sel, setSel] = useState<string>("fish");
   const ref = useRef<HTMLIFrameElement>(null);
 
-  async function loadScores() {
-    const { data } = await supabase.from("game_scores").select("game,best").eq("user_id", user.id);
+  async function loadAll() {
+    const { data: mine } = await supabase.from("game_scores").select("game,best").eq("user_id", user.id);
     const b: Record<string, number> = { fish: 0, chase: 0 };
-    (data ?? []).forEach((r: any) => { b[r.game] = r.best; });
+    (mine ?? []).forEach((r: any) => { b[r.game] = r.best; });
     setBests(b);
+    const { data: all } = await supabase.from("game_scores").select("game,name,best").order("best", { ascending: false });
+    setLb(all ?? []);
   }
-  useEffect(() => { loadScores(); }, []); // eslint-disable-line
+  useEffect(() => { loadAll(); }, []); // eslint-disable-line
 
-  function postBest() {
-    ref.current?.contentWindow?.postMessage({ type: "best", best: bests[sel] || 0 }, "*");
-  }
+  function postBest() { ref.current?.contentWindow?.postMessage({ type: "best", best: bests[sel] || 0 }, "*"); }
   useEffect(() => { postBest(); }, [bests, sel]); // eslint-disable-line
 
   useEffect(() => {
@@ -391,8 +394,9 @@ function Games({ user }: { user: any }) {
         if (sc > (bests[d.game] || 0)) {
           setBests({ ...bests, [d.game]: sc });
           await supabase.from("game_scores").upsert(
-            { user_id: user.id, game: d.game, best: sc, updated_at: new Date().toISOString() },
+            { user_id: user.id, game: d.game, best: sc, name: myName, updated_at: new Date().toISOString() },
             { onConflict: "user_id,game" });
+          loadAll();
         }
       }
     }
@@ -400,9 +404,10 @@ function Games({ user }: { user: any }) {
     return () => window.removeEventListener("message", onMsg);
   }, [bests, sel]); // eslint-disable-line
 
+  const rows = lb.filter((r) => r.game === sel).slice(0, 8);
   return (
     <div style={{ marginTop: 28 }}>
-      <h2 style={{ ...h2, fontSize: 14, color: "#64748b", marginBottom: 10 }}>While you wait &mdash; pick a game (high scores saved to your account)</h2>
+      <h2 style={{ ...h2, fontSize: 14, color: "#64748b", marginBottom: 10 }}>While you wait &mdash; pick a game, beat the lab</h2>
       <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
         {Object.keys(GAMES).map((g) => {
           const active = sel === g;
@@ -411,15 +416,28 @@ function Games({ user }: { user: any }) {
               ...chip, borderColor: active ? "#2563eb" : "#1f2633",
               background: active ? "#2563eb" : "transparent",
               color: active ? "#fff" : "#cbd5e1", fontWeight: active ? 700 : 500,
-            }}>
-              {GAMES[g].name} &middot; best {bests[g] || 0}
-            </button>
+            }}>{GAMES[g].name} &middot; best {bests[g] || 0}</button>
           );
         })}
       </div>
-      <iframe ref={ref} key={sel} src={GAMES[sel].src} title={GAMES[sel].name} scrolling="no"
-        onLoad={postBest}
-        style={{ width: "100%", height: 430, border: "1px solid #1f2633", borderRadius: 12, background: "#0d1422" }} />
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, alignItems: "start" }}>
+        <iframe ref={ref} key={sel} src={GAMES[sel].src} title={GAMES[sel].name} scrolling="no" onLoad={postBest}
+          style={{ width: "100%", height: 430, border: "1px solid #1f2633", borderRadius: 12, background: "#0d1422" }} />
+        <div style={{ ...card, marginBottom: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#fbbf24", fontWeight: 700, marginBottom: 8 }}>
+            <Trophy /> Leaderboard
+          </div>
+          {rows.length === 0 && <div style={dim}>No scores yet &mdash; be the first!</div>}
+          {rows.map((r, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, padding: "4px 0", fontSize: 13,
+              color: r.name === myName ? "#60a5fa" : "#cbd5e1", fontWeight: r.name === myName ? 700 : 400 }}>
+              <span style={{ width: 22, color: i < 3 ? "#fbbf24" : "#64748b" }}>#{i + 1}</span>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name || "anon"}{r.name === myName ? " (you)" : ""}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{r.best}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
