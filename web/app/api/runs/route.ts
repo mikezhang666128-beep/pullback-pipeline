@@ -7,63 +7,74 @@ const admin = createClient(
   process.env.SUPABASE_SERVICE_KEY!
 );
 
-type Movie = {
-  id: string;
-  working_dir: string | null;
-  ch0_path: string | null;
-  ch1_path: string | null;
-  ilp_path: string | null;
-  t_start: number; t_end: number; t_step: number;
-  sigma_smoothing: number; targetlen: number; isovalue: number;
-};
+// strip a trailing .tif/.tiff (downsample's filename_tmpl wants no extension)
+function stripTif(p: string) {
+  return p.replace(/\.tiff?$/i, "");
+}
+function baseName(p: string) {
+  const f = p.split("/").pop() ?? p;
+  return stripTif(f);
+}
 
-// POST /api/runs  { movieId }  -> creates a run + the per-step job chain for that movie.
+// POST /api/runs
+//   { marker, rawImage, timepoint, workDir, movieId? }
+// Looks up the marker's active classifier, then queues the full raw->pullback chain:
+//   downsample -> ilastik_predict -> mesh -> pullback   (each blocked_by the previous)
 export async function POST(req: NextRequest) {
-  const { movieId } = await req.json();
+  const body = await req.json();
+  const marker: string = body.marker;
+  const rawImage: string = body.rawImage;
+  const timepoint: number = Number(body.timepoint ?? 0);
+  const workDir: string = (body.workDir ?? "/home/streichansuper/mike_out").replace(/\/+$/, "");
+  const movieId: string | null = body.movieId ?? null;
 
-  const { data: movie, error } = await admin
-    .from("movies").select("*").eq("id", movieId).single<Movie>();
-  if (error || !movie) {
-    return NextResponse.json({ error: "movie not found" }, { status: 404 });
+  if (!marker || !rawImage) {
+    return NextResponse.json({ error: "marker and rawImage are required" }, { status: 400 });
   }
 
-  const wd = movie.working_dir ?? ".";
-  const ds = `${wd}/01_ds_data`;
-  const meshDir = `${wd}/02_meshes`;
-  const pullDir = `${wd}/03_pullbacks`;
-  const t = { t_start: movie.t_start, t_end: movie.t_end, t_step: movie.t_step };
+  // 1) look up the trained classifier for this marker
+  const { data: clf } = await admin
+    .from("classifiers")
+    .select("ilp_path, channel, trained")
+    .eq("marker", marker).eq("active", true).maybeSingle();
+  if (!clf) {
+    return NextResponse.json({ error: `no active classifier for marker '${marker}'` }, { status: 404 });
+  }
 
-  // create the run envelope
+  // 2) deterministic intermediate paths for this single timepoint
+  const ch = clf.channel ?? 0;
+  const stem = `TP${timepoint}_${marker}`;
+  const dsStem = `${stem}_Ch${ch}`;                 // ilastik nickname = this
+  const dsH5 = `${workDir}/${dsStem}.h5`;
+  const probH5 = `${workDir}/${dsStem}_Probabilities Stage 2.h5`;
+  const meshObj = `${workDir}/${stem}_mesh.obj`;
+  const outPrefix = `${workDir}/${stem}`;
+  const t = { t_start: timepoint, t_end: timepoint, t_step: 1 };
+
+  // 3) the run envelope
   const { data: run } = await admin
-    .from("runs").insert({ movie_id: movie.id, status: "running" }).select().single();
+    .from("runs").insert({ movie_id: movieId, status: "running" }).select().single();
 
-  // The pipeline, as a dependency chain. Each step is blocked_by the previous.
-  // (Single-box setup: one worker runs them all in order — no file shuttling.)
+  // 4) the chain
   const steps = [
     {
-      step: "downsample_ch0", capability: "downsample",
-      params: { channel: 0, filename_tmpl: movie.ch0_path,
-                downname_tmpl: `${ds}/TP{time}_Ch{ch}`, ...t },
-    },
-    {
-      step: "downsample_ch1", capability: "downsample",
-      params: { channel: 1, filename_tmpl: movie.ch1_path,
-                downname_tmpl: `${ds}/TP{time}_Ch{ch}`, ...t },
+      step: `downsample_${dsStem}`, capability: "downsample",
+      params: { channel: ch, filename_tmpl: stripTif(rawImage),
+                downname_tmpl: `${workDir}/TP{time}_${marker}_Ch{ch}`, ...t },
     },
     {
       step: "ilastik_predict", capability: "ilastik_predict",
-      params: { ilp_path: movie.ilp_path, input_glob: `${ds}/TP*_Ch0.h5`,
-                output_dir: ds, export_source: "Probabilities Stage 2" },
+      params: { ilp_path: clf.ilp_path, input_glob: dsH5,
+                output_dir: workDir, export_source: "Probabilities Stage 2" },
     },
     {
       step: "mesh", capability: "mesh",
-      params: { prob_h5: `${ds}/PROBABILITIES`, out_obj: `${meshDir}/mesoderm.obj`,
-                sigma_smoothing: movie.sigma_smoothing,
-                targetlen: movie.targetlen, isovalue: movie.isovalue },
+      params: { prob_h5: probH5, out_obj: meshObj },
     },
     {
-      step: "fiji_pullback", capability: "fiji_measure",
-      params: { input_path: `${meshDir}/mesoderm.obj`, out_dir: pullDir },
+      step: "pullback", capability: "pullback",
+      params: { mesh_obj: meshObj, raw_image: rawImage,
+                out_prefix: outPrefix, uv_grid_steps: 2048, use_fallback: true },
     },
   ];
 
@@ -71,12 +82,15 @@ export async function POST(req: NextRequest) {
   const created: string[] = [];
   for (const s of steps) {
     const { data: job } = await admin.from("jobs").insert({
-      run_id: run!.id, movie_id: movie.id, step: s.step, capability: s.capability,
+      run_id: run!.id, movie_id: movieId, step: s.step, capability: s.capability,
       status: "queued", blocked_by: prevId, params: s.params,
     }).select().single();
     prevId = job!.id;
     created.push(job!.id);
   }
 
-  return NextResponse.json({ runId: run!.id, jobIds: created });
+  return NextResponse.json({
+    runId: run!.id, jobIds: created,
+    warning: clf.trained ? null : `Classifier for '${marker}' is not fully trained yet.`,
+  });
 }
