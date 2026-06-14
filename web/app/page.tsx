@@ -360,9 +360,13 @@ function App({ user }: { user: any }) {
 }
 
 function Games({ user }: { user: any }) {
+  const GAMES: Record<string, { src: string; name: string }> = {
+    fish:  { src: "/fish-game.html",  name: "Zebrafish Runner" },
+    chase: { src: "/chase-game.html", name: "Don't Get Chased by Streichian" },
+  };
   const [bests, setBests] = useState<Record<string, number>>({ fish: 0, chase: 0 });
-  const fishRef = useRef<HTMLIFrameElement>(null);
-  const chaseRef = useRef<HTMLIFrameElement>(null);
+  const [sel, setSel] = useState<string>("fish");
+  const ref = useRef<HTMLIFrameElement>(null);
 
   async function loadScores() {
     const { data } = await supabase.from("game_scores").select("game,best").eq("user_id", user.id);
@@ -372,18 +376,17 @@ function Games({ user }: { user: any }) {
   }
   useEffect(() => { loadScores(); }, []); // eslint-disable-line
 
-  function post(ref: React.RefObject<HTMLIFrameElement>, game: string, b: Record<string, number>) {
-    ref.current?.contentWindow?.postMessage({ type: "best", best: b[game] || 0 }, "*");
+  function postBest() {
+    ref.current?.contentWindow?.postMessage({ type: "best", best: bests[sel] || 0 }, "*");
   }
-  useEffect(() => { post(fishRef, "fish", bests); post(chaseRef, "chase", bests); }, [bests]);
+  useEffect(() => { postBest(); }, [bests, sel]); // eslint-disable-line
 
   useEffect(() => {
     async function onMsg(e: MessageEvent) {
       const d: any = e.data;
       if (!d || !d.game) return;
-      if (d.type === "ready") {
-        post(d.game === "chase" ? chaseRef : fishRef, d.game, bests);
-      } else if (d.type === "gameover") {
+      if (d.type === "ready") { postBest(); }
+      else if (d.type === "gameover") {
         const sc = Math.floor(d.score || 0);
         if (sc > (bests[d.game] || 0)) {
           setBests({ ...bests, [d.game]: sc });
@@ -395,22 +398,28 @@ function Games({ user }: { user: any }) {
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [bests]); // eslint-disable-line
+  }, [bests, sel]); // eslint-disable-line
 
-  const frame: React.CSSProperties = { width: "100%", height: 300, border: "1px solid #1f2633", borderRadius: 12, background: "#0d1422" };
   return (
     <div style={{ marginTop: 28 }}>
-      <h2 style={{ ...h2, fontSize: 14, color: "#64748b", marginBottom: 8 }}>While you wait &mdash; high scores are saved to your account</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div>
-          <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 4 }}>Zebrafish Runner &middot; best {bests.fish}</div>
-          <iframe ref={fishRef} src="/fish-game.html" title="Zebrafish Runner" scrolling="no" onLoad={() => post(fishRef, "fish", bests)} style={frame} />
-        </div>
-        <div>
-          <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 4 }}>Don&rsquo;t Get Chased by Streichian &middot; best {bests.chase}</div>
-          <iframe ref={chaseRef} src="/chase-game.html" title="Chase" scrolling="no" onLoad={() => post(chaseRef, "chase", bests)} style={frame} />
-        </div>
+      <h2 style={{ ...h2, fontSize: 14, color: "#64748b", marginBottom: 10 }}>While you wait &mdash; pick a game (high scores saved to your account)</h2>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        {Object.keys(GAMES).map((g) => {
+          const active = sel === g;
+          return (
+            <button key={g} onClick={() => setSel(g)} style={{
+              ...chip, borderColor: active ? "#2563eb" : "#1f2633",
+              background: active ? "#2563eb" : "transparent",
+              color: active ? "#fff" : "#cbd5e1", fontWeight: active ? 700 : 500,
+            }}>
+              {GAMES[g].name} &middot; best {bests[g] || 0}
+            </button>
+          );
+        })}
       </div>
+      <iframe ref={ref} key={sel} src={GAMES[sel].src} title={GAMES[sel].name} scrolling="no"
+        onLoad={postBest}
+        style={{ width: "100%", height: 430, border: "1px solid #1f2633", borderRadius: 12, background: "#0d1422" }} />
     </div>
   );
 }
