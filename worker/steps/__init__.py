@@ -14,6 +14,7 @@ from .ilastik_predict import run as _ilastik_predict
 from .mesh import run as _mesh
 from .blender_pullback import run as _blender_pullback
 from .fiji_measure import run as _fiji_measure
+from .pullback import run as _pullback
 
 RUNNERS = {
     "noop_test": _noop_test,
@@ -22,4 +23,5 @@ RUNNERS = {
     "mesh": _mesh,
     "blender_pullback": _blender_pullback,
     "fiji_measure": _fiji_measure,
+    "pullback": _pullback,
 }
