@@ -2,12 +2,10 @@
 Step: pullback  (capability "pullback")
 
 Final science step: mesh -> pullback image. Two sub-steps, BOTH pure-Python (no Blender):
-  1. UV-map the mesh with a spherical unwrap (worker/uv/spherical_uv.py: sizes a sphere to
-     the mesh's own bbox and assigns each vertex the sphere-point UV straight out from the
-     centre -> _UV.obj). Replaces the manual Blender + Fiji sizing step.
+  1. UV-map the mesh with a spherical unwrap (worker/uv/spherical_uv.py).
   2. create_cartographic_projections(raw image, UV mesh) -> projected.tif  (the pullback).
 
-Runs entirely in the blender_tissue_cartography Python env (same one mesh/downsample use).
+Runs entirely in the blender_tissue_cartography Python env.
 
 job.params:
     mesh_obj     : the remeshed .obj from the mesh step
@@ -16,6 +14,9 @@ job.params:
     normal_offsets   : [start, stop, step] for np.arange (default [-45, 10, 0.7088])
     uv_grid_steps    : default 2048
     resolution_in_microns : default (0.4092, 0.4092, 0.4092)
+    use_fallback     : default True -- robust interpolation that tolerates a UV map with
+                       flipped/self-intersecting triangles (btc recommends this when the
+                       UV isn't a perfectly clean bijection, as a spherical unwrap rarely is)
 """
 from __future__ import annotations
 import os
@@ -48,11 +49,14 @@ def run(job: dict, ctx: dict) -> dict:
     no = p.get("normal_offsets", (-45, 10, 0.7088))
     normal_offsets = np.arange(*no)
     uv_grid_steps = int(p.get("uv_grid_steps", 2048))
+    use_fallback = bool(p.get("use_fallback", True))
 
-    log("cartographic projection (uv_grid_steps=%d, offsets=%s) ..." % (uv_grid_steps, tuple(no)))
+    log("cartographic projection (uv_grid_steps=%d, offsets=%s, use_fallback=%s) ..."
+        % (uv_grid_steps, tuple(no), use_fallback))
     projected_data, coords, normals = tcinterp.create_cartographic_projections(
         image=raw_image, mesh=uv_obj, resolution=resolution,
-        normal_offsets=normal_offsets, uv_grid_steps=uv_grid_steps)
+        normal_offsets=normal_offsets, uv_grid_steps=uv_grid_steps,
+        use_fallback=use_fallback)
     projected_data[np.isnan(projected_data)] = 0
 
     out_tif = out_prefix + "_projected.tif"
