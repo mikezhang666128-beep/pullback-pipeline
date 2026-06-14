@@ -347,6 +347,11 @@ function App({ user }: { user: any }) {
           </div>
         );
       })}
+      <div style={{ marginTop: 28 }}>
+        <h2 style={{ ...h2, fontSize: 14, color: "#64748b", marginBottom: 8 }}>While you wait &mdash; Zebrafish Runner (press space)</h2>
+        <iframe src="/fish-game.html" title="Zebrafish Runner" scrolling="no"
+          style={{ width: "100%", height: 340, border: "1px solid #1f2633", borderRadius: 12, background: "#0d1422" }} />
+      </div>
     </div>
   );
 }
