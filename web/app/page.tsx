@@ -404,7 +404,7 @@ function App({ user }: { user: any }) {
 function Games({ user, pv }: { user: any; pv: number }) {
   const GAMES: Record<string, { src: string; name: string }> = {
     fish:  { src: "/fish-game.html",  name: "Zebrafish Runner" },
-    chase: { src: "/chase-game.html", name: "Don't Get Chased by Streichian" },
+    chase: { src: "/chase-game.html", name: "Don't Get Chased by Streichan" },
   };
   const [bests, setBests] = useState<Record<string, number>>({ fish: 0, chase: 0 });
   const [lb, setLb] = useState<any[]>([]);
