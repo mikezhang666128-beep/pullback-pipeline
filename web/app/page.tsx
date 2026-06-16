@@ -39,6 +39,7 @@ type Classifier = { marker: string; stage: string; trained: boolean; ilp_path: s
 type Job = { id: string; run_id: string | null; capability: string; status: string; logs: string | null; created_at: string; started_at: string | null; finished_at: string | null };
 type Artifact = { job_id: string; kind: string; path: string; meta: any };
 const STATUS_COLOR: Record<string, string> = { queued: "#9ca3af", blocked: "#6b7280", running: "#3b82f6", done: "#22c55e", failed: "#ef4444", canceled: "#6b7280" };
+type Machine = { name: string; capabilities: string[]; os: string | null; last_heartbeat: string | null };
 const STEP_ORDER = ["downsample", "ilastik_predict", "mesh", "pullback"];
 
 /* ================= Auth gate ================= */
@@ -99,6 +100,7 @@ function App({ user }: { user: any }) {
   const userTag = (user.email?.split("@")[0] || user.id).replace(/[^a-zA-Z0-9_-]/g, "_");
   const [classifiers, setClassifiers] = useState<Classifier[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [machines, setMachines] = useState<Machine[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [marker, setMarker] = useState("");
   const [stage, setStage] = useState("");
@@ -168,7 +170,8 @@ function App({ user }: { user: any }) {
     const { data: c } = await supabase.from("classifiers").select("marker,stage,trained,ilp_path").eq("active", true).order("marker");
     const { data: j } = await supabase.from("jobs").select("id,run_id,capability,status,logs,created_at,started_at,finished_at").order("created_at", { ascending: true });
     const { data: a } = await supabase.from("artifacts").select("job_id,kind,path,meta");
-    setClassifiers(c ?? []); setJobs(j ?? []); setArtifacts(a ?? []);
+    const { data: m } = await supabase.from("machines").select("name,capabilities,os,last_heartbeat");
+    setClassifiers(c ?? []); setJobs(j ?? []); setArtifacts(a ?? []); setMachines(m ?? []);
     if (!marker && c && c.length) setMarker(c[0].marker);
   }
   useEffect(() => {
@@ -219,6 +222,15 @@ function App({ user }: { user: any }) {
     await load();
   }
 
+  // worker status: a box is "online" if it sent a heartbeat in the last 75s (worker beats every 30s)
+  const liveWorkers = machines.filter((m) => m.last_heartbeat && now - Date.parse(m.last_heartbeat) < 75000);
+  const workerOnline = liveWorkers.length > 0;
+  const workerBusy = workerOnline && jobs.some((j) => j.status === "running");
+  const wColor = workerOnline ? "#22c55e" : "#9ca3af";
+  const wLabel = !workerOnline ? "Worker offline" : workerBusy ? "Worker working" : "Worker online";
+  const wTitle = machines.length
+    ? machines.map((m) => `${m.name}: ${m.last_heartbeat ? Math.round((now - Date.parse(m.last_heartbeat)) / 1000) + "s ago" : "no heartbeat"}`).join("\n")
+    : "no workers registered";
   const runIds = (Array.from(new Set(jobs.map((j) => j.run_id).filter(Boolean))) as string[]).reverse();
   const selected = classifiers.find((c) => c.marker === marker && c.stage === stage);
   const noStages = marker && stagesFor(marker).length === 0;
@@ -230,11 +242,18 @@ function App({ user }: { user: any }) {
   return (
     <div>
       {/* top bar */}
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 8 }}>
-        {myAvatar && <img src={myAvatar} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", border: "1px solid #1f2633" }} />}
-        <span style={dim}>{pName || user.email}</span>
-        <button onClick={() => setProfileOpen(!profileOpen)} style={ghost}>Profile</button>
-        <button onClick={() => supabase.auth.signOut()} style={{ ...ghost, display: "inline-flex", alignItems: "center", gap: 6 }}><Out /> Sign out</button>
+      <style>{`@keyframes wpulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 8 }}>
+        <div title={wTitle} style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "#cbd5e1" }}>
+          <span style={{ width: 9, height: 9, borderRadius: "50%", background: wColor, boxShadow: workerOnline ? `0 0 7px ${wColor}` : "none", animation: workerBusy ? "wpulse 1.1s ease-in-out infinite" : "none" }} />
+          {wLabel}
+        </div>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+          {myAvatar && <img src={myAvatar} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", border: "1px solid #1f2633" }} />}
+          <span style={dim}>{pName || user.email}</span>
+          <button onClick={() => setProfileOpen(!profileOpen)} style={ghost}>Profile</button>
+          <button onClick={() => supabase.auth.signOut()} style={{ ...ghost, display: "inline-flex", alignItems: "center", gap: 6 }}><Out /> Sign out</button>
+        </div>
       </div>
       {profileOpen && (
         <div style={card}>
