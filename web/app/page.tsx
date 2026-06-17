@@ -278,9 +278,7 @@ function App({ user }: { user: any }) {
       )}
 
       <div style={{ display: "flex", gap: 18, alignItems: "center", margin: "2px 4px 14px", fontSize: 13 }}>
-        <a href="/guide" target="_blank" rel="noreferrer" style={{ color: "var(--color-accent)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}><Info /> How to use</a>
-        <a href="/guide#worker" target="_blank" rel="noreferrer" style={{ color: "var(--color-accent)", textDecoration: "none" }}>Worker reset</a>
-        <a href="/guide" target="_blank" rel="noreferrer" style={{ color: "var(--color-muted)", textDecoration: "none", marginLeft: "auto" }}>Full guide &rarr;</a>
+        <a href="/guide" target="_blank" rel="noreferrer" style={{ color: "var(--color-accent)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}><Info /> How to use &amp; worker guide &rarr;</a>
       </div>
 
       {/* Run */}
