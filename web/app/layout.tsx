@@ -8,7 +8,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body style={{ fontFamily: "system-ui, sans-serif", margin: 0, background: "#0b0e14", color: "#e6e6e6" }}>
+      <body style={{ fontFamily: "system-ui, sans-serif", margin: 0, background: "var(--color-base)", color: "var(--color-foreground)" }}>
         <div style={{ maxWidth: 980, margin: "0 auto", padding: "32px 20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </svg>
             <h1 style={{ fontSize: 22, margin: 0 }}>Germ-Layer Pullback Pipeline</h1>
           </div>
-          <p style={{ color: "#8a93a6", marginTop: 0 }}>Pick a marker and stage, point it at a raw embryo, get a mesh back.</p>
+          <p style={{ color: "var(--color-muted)", marginTop: 0 }}>Pick a marker and stage, point it at a raw embryo, get a mesh back.</p>
           {children}
         </div>
       </body>

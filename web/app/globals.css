@@ -2,20 +2,24 @@
 
 /* ---------------------------------------------------------------------------
    Design tokens — the single source of truth for the dashboard's palette.
-   These map our existing hardcoded hex values to semantic names, so utilities
-   like `bg-surface`, `border-line`, `text-muted`, `text-success` Just Work.
-   Change a color here once and it updates everywhere.
+   Every color in the app references one of these (via var(--color-x) in inline
+   styles, or bg-surface / text-muted / border-line utilities). Change a value
+   here once and it updates everywhere. This block is currently a LIGHT theme.
 --------------------------------------------------------------------------- */
 @theme {
-  --color-base: #0b0e14;          /* page background */
-  --color-surface: #11151f;       /* cards / panels */
-  --color-line: #1f2633;          /* borders / hairlines */
-  --color-foreground: #e6e6e6;    /* primary text */
-  --color-muted: #8a93a6;         /* secondary / dim text */
+  --color-base: #f6f7f9;          /* page background */
+  --color-surface: #ffffff;       /* cards / panels */
+  --color-line: #e3e6ea;          /* borders / hairlines */
+  --color-foreground: #1b1f27;    /* primary text */
+  --color-muted: #5f6b7a;         /* secondary / dim text + helper text */
   --color-primary: #2563eb;       /* primary buttons */
   --color-primary-hover: #1d4ed8; /* primary hover */
-  --color-accent: #3b82f6;        /* links / accents */
-  --color-success: #22c55e;       /* online / done */
-  --color-warning: #f59e0b;       /* untrained / caution */
-  --color-danger: #ef4444;        /* failed / delete */
+  --color-on-primary: #ffffff;    /* text on primary buttons */
+  --color-accent: #2563eb;        /* links / accents / icons */
+  --color-success: #16a34a;       /* online / done */
+  --color-warning: #d97706;       /* untrained / caution */
+  --color-danger: #dc2626;        /* failed / delete */
 }
+
+/* page background + base text, applied globally */
+body { background: var(--color-base); color: var(--color-foreground); }
