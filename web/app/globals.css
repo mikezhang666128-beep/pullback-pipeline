@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens — the single source of truth for the dashboard's palette.
+   These map our existing hardcoded hex values to semantic names, so utilities
+   like `bg-surface`, `border-line`, `text-muted`, `text-success` Just Work.
+   Change a color here once and it updates everywhere.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-base: #0b0e14;          /* page background */
+  --color-surface: #11151f;       /* cards / panels */
+  --color-line: #1f2633;          /* borders / hairlines */
+  --color-foreground: #e6e6e6;    /* primary text */
+  --color-muted: #8a93a6;         /* secondary / dim text */
+  --color-primary: #2563eb;       /* primary buttons */
+  --color-primary-hover: #1d4ed8; /* primary hover */
+  --color-accent: #3b82f6;        /* links / accents */
+  --color-success: #22c55e;       /* online / done */
+  --color-warning: #f59e0b;       /* untrained / caution */
+  --color-danger: #ef4444;        /* failed / delete */
+}

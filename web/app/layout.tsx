@@ -1,3 +1,5 @@
+import "./globals.css";
+
 export const metadata = {
   title: "Pullback Pipeline",
   description: "Germ-layer pullback pipeline control panel",
