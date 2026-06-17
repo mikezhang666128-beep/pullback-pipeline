@@ -1,12 +1,12 @@
-const card: React.CSSProperties = { border: "1px solid #1f2633", borderRadius: 10, padding: 18, marginBottom: 14, background: "#11151f" };
-const pre: React.CSSProperties = { background: "#0b0e14", border: "1px solid #1f2633", borderRadius: 8, padding: "10px 12px", overflowX: "auto", fontSize: 12.5, color: "#86efac", whiteSpace: "pre", margin: "6px 0" };
+const card: React.CSSProperties = { border: "1px solid var(--color-line)", borderRadius: 10, padding: 18, marginBottom: 14, background: "var(--color-surface)" };
+const pre: React.CSSProperties = { background: "var(--color-base)", border: "1px solid var(--color-line)", borderRadius: 8, padding: "10px 12px", overflowX: "auto", fontSize: 12.5, color: "var(--color-foreground)", whiteSpace: "pre", margin: "6px 0" };
 const h2: React.CSSProperties = { fontSize: 18, margin: "0 0 12px" };
-const dim: React.CSSProperties = { color: "#8a93a6" };
+const dim: React.CSSProperties = { color: "var(--color-muted)" };
 
 export default function Guide() {
   return (
-    <div style={{ lineHeight: 1.7, fontSize: 14.5, color: "#cbd5e1" }}>
-      <a href="/" style={{ color: "#3b82f6", textDecoration: "none", fontSize: 14 }}>&larr; Back to dashboard</a>
+    <div style={{ lineHeight: 1.7, fontSize: 14.5, color: "var(--color-foreground)" }}>
+      <a href="/" style={{ color: "var(--color-accent)", textDecoration: "none", fontSize: 14 }}>&larr; Back to dashboard</a>
       <h1 style={{ fontSize: 24, margin: "12px 0 6px" }}>Instructions</h1>
       <p style={dim}>How the tool works, how to use it, and how to keep it running.</p>
 
@@ -70,7 +70,7 @@ tail -n 20 ~/worker.log`}</pre>
         </ul>
       </div>
 
-      <a href="/" style={{ color: "#3b82f6", textDecoration: "none", fontSize: 14 }}>&larr; Back to dashboard</a>
+      <a href="/" style={{ color: "var(--color-accent)", textDecoration: "none", fontSize: 14 }}>&larr; Back to dashboard</a>
     </div>
   );
 }
